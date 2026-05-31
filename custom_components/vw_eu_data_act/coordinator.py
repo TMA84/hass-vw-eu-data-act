@@ -68,24 +68,7 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
         self.latest_dataset: Dataset | None = None
 
     async def _async_update_data(self) -> dict[str, DataPoint]:
-        try:
-            listing = await self.client.async_list_datasets(self.vin, self.identifier)
-        except AuthError as err:
-            # Retry soon rather than waiting the full ~15-min cadence.
-            self.update_interval = RETRY_INTERVAL
-            raise UpdateFailed(f"Authentication failed: {err}") from err
-        except ApiError as err:
-            self.update_interval = RETRY_INTERVAL
-            if "HTTP 400" in str(err):
-                # The data-delivery endpoint returns 400 until the portal has
-                # finished provisioning a newly enabled continuous data request,
-                # which can take a few hours. HA keeps retrying until it's ready.
-                raise UpdateFailed(
-                    "Data delivery not ready yet (HTTP 400). If you just enabled "
-                    "the continuous data request on the portal, it can take a few "
-                    "hours to start; will keep retrying."
-                ) from err
-            raise UpdateFailed(str(err)) from err
+        listing = await self._async_list_with_refresh()
 
         # content datasets, oldest -> newest by createdOn
         content = sorted(
@@ -118,6 +101,67 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
 
         self._reschedule(listing)
         return self.latest_dataset.points
+
+    async def _async_list_with_refresh(self) -> list[dict]:
+        """List datasets, self-healing a stale identifier once if needed.
+
+        If the user deletes and recreates the continuous data subscription on
+        the portal, the backend assigns a new identifier and the stored one
+        stops working (the list errors or returns no files). Re-fetch the
+        identifier from the metadata endpoint and retry once before giving up —
+        so it recovers on the next cycle without needing a manual reload.
+        """
+        for retried in (False, True):
+            try:
+                listing = await self.client.async_list_datasets(self.vin, self.identifier)
+            except AuthError as err:
+                self.update_interval = RETRY_INTERVAL
+                raise UpdateFailed(f"Authentication failed: {err}") from err
+            except ApiError as err:
+                if not retried and await self._refresh_identifier():
+                    continue
+                self.update_interval = RETRY_INTERVAL
+                if "HTTP 400" in str(err):
+                    # The data-delivery endpoint returns 400 until the portal
+                    # finishes provisioning a newly enabled data request, which
+                    # can take a few hours. HA keeps retrying until it's ready.
+                    raise UpdateFailed(
+                        "Data delivery not ready yet (HTTP 400). If you just enabled "
+                        "the continuous data request on the portal, it can take a few "
+                        "hours to start; will keep retrying."
+                    ) from err
+                raise UpdateFailed(str(err)) from err
+            # An empty listing can also mean the subscription was recreated.
+            if not listing and not retried and await self._refresh_identifier():
+                continue
+            return listing
+        return listing
+
+    async def _refresh_identifier(self) -> bool:
+        """Re-fetch the data-request identifier; persist it if it changed.
+
+        Returns True (and updates the config entry) when the portal has handed
+        out a new identifier, e.g. after the subscription was recreated.
+        """
+        try:
+            meta = await self.client.async_get_metadata(self.vin)
+        except ApiError as err:
+            _LOGGER.debug("Could not refresh data-request identifier: %s", err)
+            return False
+        new_id = meta.get("Identifier") or meta.get("identifier")
+        if not new_id or new_id == self.identifier:
+            return False
+        _LOGGER.warning(
+            "Data-request identifier changed (%s -> %s); the portal subscription "
+            "was likely recreated. Updating the config entry.",
+            self.identifier,
+            new_id,
+        )
+        self.identifier = new_id
+        self.hass.config_entries.async_update_entry(
+            self.entry, data={**self.entry.data, CONF_IDENTIFIER: new_id}
+        )
+        return True
 
     def _reschedule(self, listing: list[dict]) -> None:
         """Schedule the next poll for ~15 min after the newest known dataset.
