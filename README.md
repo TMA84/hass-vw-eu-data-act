@@ -163,7 +163,13 @@ python -m venv .venv && .venv/bin/pip install pdfplumber
 .venv/bin/python tools/parse_dictionary.py path/to/DataDictionary.pdf
 ```
 
-## Release notes (0.3.2)
+## Release notes (0.3.3)
+
+- Improve `Last connected` timestamp handling with a fallback parser for
+  value-encoded timestamps (epoch millis / ISO text).
+- Show `Remaining climate time` without unnecessary decimals (`0 s` instead of
+  `0.00 s`).
+- Refine German charge action label text (`Lademodus waehlen`).
 
 - Fix startup crash (`NameError: DOMAIN is not defined`) in
   `async_setup_entry` by importing `DOMAIN` from `const.py`.

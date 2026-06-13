@@ -181,7 +181,7 @@ _ENUM_LABELS_BY_LANG: dict[str, dict[str, str]] = {
     "IMMEDIATE_ACTION_STOPPED": "Sofortaktion gestoppt",
     "IMMEDIATE_ACTION_RANGE": "Sofortaktion Reichweite",
     "IMMEDIATE_ACTION_SOC": "Sofortaktion Ladezustand",
-    "CHARGE_MODE_SELECTION": "Lademodus-Auswahl",
+    "CHARGE_MODE_SELECTION": "Lademodus waehlen",
 
     # Charging scenario
     "OFF": "Aus",
@@ -795,6 +795,7 @@ CURATED_SENSORS_DOTTED: tuple[CuratedSensor, ...] = (
         "s",
         "measurement",
         transform="duration_s",
+        suggested_display_precision=0,
     ),
     CuratedSensor(
         "residual_energy_in_percent",
@@ -970,6 +971,7 @@ CURATED_SENSORS_FLAT: tuple[CuratedSensor, ...] = (
         "s",
         "measurement",
         transform="duration_s",
+        suggested_display_precision=0,
     ),
     CuratedSensor(
         "residual_energy_in_percent",

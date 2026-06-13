@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import re
 from typing import Any
 
@@ -120,6 +121,44 @@ def _humanize_status(value: str) -> str:
 def _format_status_label(value: str, language: str | None) -> str:
     labels = _STATUS_LABELS.get(_language_key(language), {})
     return labels.get(value, _humanize_status(value))
+
+
+def _parse_timestamp_value(raw_value: Any) -> datetime | None:
+    """Parse timestamp values from dataset payloads.
+
+    Some fields expose timestamps in the datapoint value itself (epoch millis or
+    ISO string) while others only carry timestampUtc metadata.
+    """
+    if raw_value is None:
+        return None
+
+    if isinstance(raw_value, datetime):
+        return raw_value
+
+    if isinstance(raw_value, (int, float)):
+        value = int(raw_value)
+        if value >= 10**12:
+            try:
+                return datetime.fromtimestamp(value / 1000, tz=timezone.utc)
+            except (ValueError, OSError):
+                return None
+        return None
+
+    if isinstance(raw_value, str):
+        text = raw_value.strip()
+        if not text:
+            return None
+        if text.isdigit() and len(text) >= 12:
+            try:
+                return datetime.fromtimestamp(int(text) / 1000, tz=timezone.utc)
+            except (ValueError, OSError):
+                return None
+        try:
+            return datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    return None
 
 
 async def async_setup_entry(
@@ -244,8 +283,12 @@ class EudaCuratedSensor(EudaEntity, SensorEntity):
         if ".timestamp" in self._curated.field_name:
             base_field = self._curated.field_name.replace(".timestamp", "")
             dp = _find_by_field(self.coordinator.data or {}, base_field)
-            if dp and dp.timestamp:
-                return self._sticky(dp.timestamp)
+            if dp:
+                # Prefer the transport timestamp, but fall back to value-encoded
+                # timestamps used by some dataset variants.
+                parsed = dp.timestamp or _parse_timestamp_value(dp.raw_value)
+                if parsed:
+                    return self._sticky(parsed)
             return self._sticky(None)
 
         dp = _find_by_field(self.coordinator.data or {}, self._curated.field_name)
