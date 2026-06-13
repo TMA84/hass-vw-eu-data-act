@@ -163,7 +163,7 @@ python -m venv .venv && .venv/bin/pip install pdfplumber
 .venv/bin/python tools/parse_dictionary.py path/to/DataDictionary.pdf
 ```
 
-## Release notes (0.3.0)
+## Release notes (0.3.1)
 
 - Non-blocking initial setup: entities load immediately and first refresh runs
   in the background.
