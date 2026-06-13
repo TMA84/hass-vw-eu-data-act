@@ -12,7 +12,15 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import EudaApiClient
-from .const import CONF_BRAND, CONF_EMAIL, CONF_PASSWORD, CONF_VIN, DEFAULT_BRAND, raw_unique_id
+from .const import (
+    CONF_BRAND,
+    CONF_EMAIL,
+    CONF_PASSWORD,
+    CONF_VIN,
+    DEFAULT_BRAND,
+    DOMAIN,
+    raw_unique_id,
+)
 from .coordinator import EudaCoordinator
 from .data import load_dictionary
 from .utility_meter import async_ensure_utility_meters

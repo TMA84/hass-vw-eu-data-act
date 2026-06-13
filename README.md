@@ -163,7 +163,10 @@ python -m venv .venv && .venv/bin/pip install pdfplumber
 .venv/bin/python tools/parse_dictionary.py path/to/DataDictionary.pdf
 ```
 
-## Release notes (0.3.1)
+## Release notes (0.3.2)
+
+- Fix startup crash (`NameError: DOMAIN is not defined`) in
+  `async_setup_entry` by importing `DOMAIN` from `const.py`.
 
 - Non-blocking initial setup: entities load immediately and first refresh runs
   in the background.
