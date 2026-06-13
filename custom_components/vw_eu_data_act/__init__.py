@@ -15,6 +15,7 @@ from .api import EudaApiClient
 from .const import CONF_BRAND, CONF_EMAIL, CONF_PASSWORD, CONF_VIN, DEFAULT_BRAND, raw_unique_id
 from .coordinator import EudaCoordinator
 from .data import load_dictionary
+from .utility_meter import async_ensure_utility_meters
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
@@ -29,7 +30,12 @@ type EudaConfigEntry = ConfigEntry[EudaRuntimeData]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: EudaConfigEntry) -> bool:
-    """Set up VW EU Data Act from a config entry."""
+    """Set up VW EU Data Act from a config entry.
+
+    Setup is intentionally non-blocking: the first portal dataset can take a
+    while to appear, so entities are loaded immediately and the first refresh
+    runs in the background.
+    """
     # Own session (own cookie jar — auth is cookie-based) but reuse Home
     # Assistant's shared connector so we benefit from its warm DNS cache and are
     # resilient to transient DNS hiccups. connector_owner=False so closing our
@@ -46,9 +52,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: EudaConfigEntry) -> bool
 
         client = EudaApiClient(session, entry.data[CONF_EMAIL], entry.data[CONF_PASSWORD], entry.data.get(CONF_BRAND, DEFAULT_BRAND))
         coordinator = EudaCoordinator(hass, entry, client)
-
-        await coordinator.async_config_entry_first_refresh()
-
         entry.runtime_data = EudaRuntimeData(coordinator=coordinator, session=session)
 
         # Migrate pre-0.1.3 raw sensor unique_ids (bare dataset key -> VIN_key)
@@ -56,6 +59,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: EudaConfigEntry) -> bool
         await _async_migrate_raw_unique_ids(hass, entry)
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+        @callback
+        def _on_coordinator_update() -> None:
+            hass.async_create_task(async_ensure_utility_meters(hass, entry))
+
+        entry.async_on_unload(coordinator.async_add_listener(_on_coordinator_update))
+        _on_coordinator_update()
+
+        # Refresh in the background so setup does not block while waiting for
+        # the portal's next dataset generation cycle.
+        entry.async_create_background_task(
+            hass,
+            coordinator.async_refresh(),
+            name=f"{DOMAIN} initial refresh {entry.data[CONF_VIN]}",
+        )
     except Exception:
         # Setup failed: HA will not call async_unload_entry, so close the
         # session here to avoid leaking it (and its connector).

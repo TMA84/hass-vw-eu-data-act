@@ -1,0 +1,103 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "VW Group EU Data Act",
+        "description": "Selecciona la marca de tu vehiculo.",
+        "data": {
+          "brand": "Marca"
+        }
+      },
+      "credentials": {
+        "title": "Iniciar sesion",
+        "description": "Introduce tus credenciales VW-ID (las mismas que en eu-data-act.drivesomethinggreater.com).",
+        "data": {
+          "email": "Correo electronico",
+          "password": "Contrasena"
+        }
+      },
+      "vehicle": {
+        "title": "Seleccionar vehiculo",
+        "data": {
+          "vin": "Vehiculo"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Volver a autenticarse",
+        "description": "Introduce la contrasena para {email}.",
+        "data": {
+          "password": "Contrasena"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Correo electronico o contrasena no validos para la marca seleccionada.",
+      "cannot_connect": "No se pudo conectar con el portal EU Data Act.",
+      "no_vehicles": "No se encontraron vehiculos para esta cuenta.",
+      "unknown": "Se produjo un error inesperado."
+    },
+    "abort": {
+      "already_configured": "Este vehiculo ya esta configurado.",
+      "auth": "Error de autenticacion; vuelve a agregar la integracion.",
+      "reauth_successful": "La reautenticacion se completo correctamente."
+    }
+  },
+  "exceptions": {
+    "waiting_for_portal_data": {
+      "message": "Inicio de sesion correcto: esperando la primera entrega de datos del vehiculo desde el portal EU Data Act. Esto es normal justo despues de la configuracion y no es un error de acceso.\n\nEn el portal ({portal_url}), comprueba que:\n• Existe una solicitud continua de datos cada 15 minutos para este vehiculo\n• El vehiculo esta vinculado en Data clusters -> Vehicle overview\n• El coche estuvo en linea recientemente (contacto o app movil)\n\nLos primeros datos reales suelen llegar en 15-60 minutos, a veces en algunas horas. Los snapshots vacios _no_content_found son normales cuando el coche no envio telemetria en esa ventana de 15 minutos; se ignoran automaticamente.\n\nHome Assistant reintenta cada {retry_minutes} minuto(s). No hace falta eliminar ni volver a agregar la integracion."
+    },
+    "waiting_for_portal_data_empty_snapshots": {
+      "message": "Inicio de sesion correcto: la suscripcion del portal esta activa, pero por ahora solo se recibieron snapshots vacios ({empty_count} x _no_content_found). El vehiculo aun no envio telemetria en esas ventanas de 15 minutos.\n\nNo es un error de Home Assistant ni de autenticacion. En el portal ({portal_url}) confirma que la solicitud continua de 15 minutos esta activa para este VIN y despierta el coche (conduciendo, contacto o app movil) para que envie datos.\n\nEl siguiente intervalo puede traer valores reales. Home Assistant reintenta cada {retry_minutes} minuto(s): no elimines la integracion."
+    },
+    "delivery_not_ready": {
+      "message": "Inicio de sesion correcto: la entrega de datos todavia no esta lista (HTTP 400). Si acabas de crear la solicitud continua de 15 minutos en el portal ({portal_url}), el backend puede tardar algunas horas en empezar a entregar ZIP.\n\nHome Assistant reintenta cada {retry_minutes} minuto(s). No es un problema de credenciales."
+    },
+    "config_entry_not_found": {
+      "message": "No se encontro ninguna entrada VW Group EU Data Act para el vehiculo seleccionado."
+    },
+    "no_config_entries": {
+      "message": "No hay vehiculos VW Group EU Data Act configurados."
+    },
+    "no_loaded_entries": {
+      "message": "La integracion del vehiculo seleccionado no esta cargada."
+    }
+  },
+  "services": {
+    "refresh_now": {
+      "name": "Actualizar ahora",
+      "description": "Consulta inmediatamente el portal EU Data Act para obtener un nuevo dataset, sin esperar al siguiente ciclo programado.",
+      "fields": {
+        "config_entry": {
+          "name": "Vehiculo",
+          "description": "Vehiculo a actualizar. Dejalo vacio para actualizar todos los vehiculos configurados."
+        }
+      }
+    }
+  },
+  "issues": {
+    "delivery_not_ready": {
+      "title": "Entrega de datos aun no lista para {vehicle}",
+      "description": "El portal EU Data Act todavia no ha comenzado a entregar datasets para este vehiculo (HTTP 400). Si acabas de crear la solicitud continua de 15 minutos, la activacion puede tardar algunas horas.\n\nAbre el portal ({portal_url}) y verifica la suscripcion. Home Assistant reintenta cada {retry_minutes} minuto(s). No es un problema de credenciales."
+    },
+    "waiting_for_portal_data": {
+      "title": "Esperando el primer dataset para {vehicle}",
+      "description": "Inicio de sesion correcto pero aun no se recibio ningun dataset. En el portal ({portal_url}), verifica que exista una solicitud continua de 15 minutos, que el vehiculo este vinculado en Data clusters y que estuvo en linea recientemente.\n\nLos primeros datos suelen llegar en 15-60 minutos. Home Assistant reintenta cada {retry_minutes} minuto(s)."
+    },
+    "empty_snapshots": {
+      "title": "Solo snapshots vacios para {vehicle}",
+      "description": "La suscripcion del portal esta activa, pero solo se recibieron snapshots vacios ({empty_count} x _no_content_found). Despierta el coche (conduciendo, contacto o app) para que envie telemetria.\n\nHome Assistant reintenta cada {retry_minutes} minuto(s). Portal: {portal_url}"
+    },
+    "listing_failed": {
+      "title": "No se pudieron listar datasets para {vehicle}",
+      "description": "Home Assistant no pudo listar datasets en el portal EU Data Act ({portal_url}); normalmente es una caida temporal del portal (HTTP 5xx), no un problema de acceso ni suscripcion.\n\nSe mantienen los ultimos valores conocidos del vehiculo. Los nuevos intentos se ralentizan automaticamente (5 -> 15 -> 30 minutos). Proximo intento en aproximadamente {retry_minutes} minuto(s)."
+    },
+    "subscription_expiring_soon": {
+      "title": "La suscripcion del portal caduca pronto para {vehicle}",
+      "description": "Se estima que la suscripcion del portal EU Data Act caducara en {days_until} dia(s). Debes renovar la solicitud continua en el portal; de lo contrario, dejaran de llegar datasets.\n\nAbre el portal ({portal_url}) y renueva la suscripcion antes de que caduque."
+    },
+    "stale_snapshot": {
+      "title": "Sin datos recientes del vehiculo para {vehicle}",
+      "description": "El ultimo snapshot real del vehiculo tiene aproximadamente {hours_since} hora(s) ({minutes_since} minutos). Puede que el coche este fuera de linea o que el portal no este entregando nuevos datasets.\n\nDespierta el coche (conduciendo, contacto o app) y verifica que la solicitud continua siga activa en el portal ({portal_url})."
+    }
+  }
+}

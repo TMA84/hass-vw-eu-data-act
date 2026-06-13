@@ -38,6 +38,11 @@ BRANDS: dict[str, dict[str, str]] = {
         "client_id": "9b58543e-1c15-4193-91d5-8a14145bebb0@apps_vw-dilab_com",
         "state": "VOLKSWAGEN_PASSENGER_CARS",
     },
+    "volkswagen_commercial": {
+        "display_name": "Volkswagen Commercial Vehicles",
+        "client_id": "9b58543e-1c15-4193-91d5-8a14145bebb0@apps_vw-dilab_com",
+        "state": "VOLKSWAGEN_COMMERCIAL_VEHICLES",
+    },
     "audi": {
         "display_name": "Audi",
         "client_id": "cc29b87a-5e9a-4362-aecf-5adea6b01bbb@apps_vw-dilab_com",
@@ -57,6 +62,11 @@ BRANDS: dict[str, dict[str, str]] = {
         "display_name": "CUPRA",
         "client_id": "f85e5b69-e3b2-43aa-9c0d-1b7d0e0b576f@apps_vw-dilab_com",
         "state": "CUPRA",
+    },
+    "bentley": {
+        "display_name": "Bentley",
+        "client_id": "d38aac0f-3d89-4a63-8538-b75b31322c7b@apps_vw-dilab_com",
+        "state": "BENTLEY",
     },
 }
 
@@ -113,6 +123,13 @@ DATASET_INTERVAL = timedelta(minutes=15)
 POST_DATASET_BUFFER = timedelta(seconds=45)
 RETRY_INTERVAL = timedelta(minutes=1)
 MIN_INTERVAL = timedelta(seconds=30)
+
+# Backoff after repeated portal 5xx errors; cap at 30 minutes.
+SERVER_ERROR_BACKOFF_INTERVALS = (
+    timedelta(minutes=5),
+    timedelta(minutes=15),
+    timedelta(minutes=30),
+)
 
 # Files with this suffix carry no payload and are skipped.
 NO_CONTENT_SUFFIX = "_no_content_found.zip"

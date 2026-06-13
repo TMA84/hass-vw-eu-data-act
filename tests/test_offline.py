@@ -53,8 +53,8 @@ def main() -> int:
     check("float", data.parse_value("0.0", "float"), 0.0)
     check("bool true", data.parse_value("true", "boolean"), True)
     check("bool false", data.parse_value("false"), False)
-    check("duration 0s", data.parse_value("0s"), 0.0)
-    check("duration 1800s", data.parse_value("1800s"), 1800.0)
+    check("duration 0s", data.parse_value("0s"), 0)
+    check("duration 1800s", data.parse_value("1800s"), 1800)
     check("enum stays str", data.parse_value("WINDOW_HEATING_STATE_OFF"), "WINDOW_HEATING_STATE_OFF")
     check("empty -> None", data.parse_value(""), None)
 
@@ -100,7 +100,7 @@ def main() -> int:
     check("min_temperature", _field_val(ds, "min_temperature"), 19.5)
     check("locked", _field_val(ds, "locked"), True)
     check("parking_brake", _field_val(ds, "parking_brake"), True)
-    check("remaining_climate_time", _field_val(ds, "remaining_climate_time"), 0.0)
+    check("remaining_climate_time", _field_val(ds, "remaining_climate_time"), 0)
     check("captured_at present", ds.captured_at is not None, True)
 
     # --- duplicate field: deterministic selection regardless of order -----
@@ -194,6 +194,20 @@ def main() -> int:
     unit_dp = ds_mi.by_field("mileage.unit")
     check("resolved unit from dataset", data.resolve_distance_unit(unit_dp.value), "mi")
 
+    print("brand coverage:")
+    check("vw commercial brand exists", "volkswagen_commercial" in const.BRANDS, True)
+    check("bentley brand exists", "bentley" in const.BRANDS, True)
+    check(
+        "vw commercial state",
+        const.get_oidc_state("volkswagen_commercial"),
+        "de__en__VOLKSWAGEN_COMMERCIAL_VEHICLES",
+    )
+    check(
+        "bentley state",
+        const.get_oidc_state("bentley"),
+        "de__en__BENTLEY",
+    )
+
     # --- (5) friendly names for bare fields ------------------------------
     print("friendly raw names:")
     check("bare value -> description", data.friendly_name("value", "Value of the primary range"), "Value of the primary range")
@@ -216,6 +230,149 @@ def main() -> int:
     check("string label unchanged", dp_str.value, "IMMEDIATE_ACTION_STATE_IMMEDIATE_CHARGING")
     dp_prose = data.DataPoint("k", "report_type", "3", "enum", None, "The enum value of report type")
     check("prose enum desc -> int kept", dp_prose.value, 3)
+
+    print("curated enum formatting:")
+    check(
+        "charge mode",
+        data.format_curated_value(
+            "charging_state_report.charge_mode",
+            "CHARGE_MODE_IMMEDIATELY_DEFAULT",
+        ),
+        "Immediately (default)",
+    )
+    check(
+        "charge mode selection",
+        data.format_curated_value(
+            "settings.charge_mode_selection",
+            "CHARGE_MODE_SELECTION_IMMEDIATECHARGING",
+        ),
+        "Immediate Charging",
+    )
+    check(
+        "charge state",
+        data.format_curated_value(
+            "charging_state_report.current_charge_state",
+            "CHARGE_STATE_NOT_READY_FOR_CHARGING",
+        ),
+        "Not Ready For Charging",
+    )
+    check(
+        "charge mode de",
+        data.format_curated_value(
+            "charging_state_report.charge_mode",
+            "CHARGE_MODE_IMMEDIATELY_DEFAULT",
+            language="de",
+        ),
+        "Sofort (Standard)",
+    )
+    check(
+        "charge state de",
+        data.format_curated_value(
+            "charging_state_report.current_charge_state",
+            "CHARGE_STATE_NOT_READY_FOR_CHARGING",
+            language="de-DE",
+        ),
+        "Nicht ladebereit",
+    )
+    check(
+        "window heating de",
+        data.format_curated_value(
+            "window_heating_state",
+            "WINDOW_HEATING_STATE_OFF",
+            language="de",
+        ),
+        "Aus",
+    )
+    check(
+        "charge scenario active de",
+        data.format_curated_value(
+            "charging_state_report.charging_scenario",
+            "CHARGING_SCENARIO_IMMEDIATELY_CHARGING_ACTIVE",
+            language="de",
+        ),
+        "Sofortladen aktiv",
+    )
+    check(
+        "charge current reduced de",
+        data.format_curated_value(
+            "settings.max_charge_current_ac",
+            "MAX_CHARGE_CURRENT_AC_REDUCED",
+            language="de",
+        ),
+        "Reduziert",
+    )
+    check(
+        "charge current reduced de (dict prefix)",
+        data.format_curated_value(
+            "settings.max_charge_current_ac",
+            "MAX_CHARGE_CURRENT_REDUCED",
+            language="de",
+        ),
+        "Reduziert",
+    )
+    check(
+        "invalid de with umlaut",
+        data.format_curated_value(
+            "settings.max_charge_current_ac",
+            "MAX_CHARGE_CURRENT_AC_INVALID",
+            language="de",
+        ),
+        "Ungültig",
+    )
+    check(
+        "invalid de with umlaut (dict prefix)",
+        data.format_curated_value(
+            "settings.max_charge_current_ac",
+            "MAX_CHARGE_CURRENT_INVALID",
+            language="de",
+        ),
+        "Ungültig",
+    )
+    check(
+        "charge mode profile de",
+        data.format_curated_value(
+            "charging_state_report.charge_mode",
+            "CHARGE_MODE_EXTENDED_PROFILE",
+            language="de",
+        ),
+        "Erweitertes Profil",
+    )
+    check(
+        "charge mode fr",
+        data.format_curated_value(
+            "charging_state_report.charge_mode",
+            "CHARGE_MODE_IMMEDIATELY_DEFAULT",
+            language="fr",
+        ),
+        "Charge immediate (par defaut)",
+    )
+    check(
+        "charge state it",
+        data.format_curated_value(
+            "charging_state_report.current_charge_state",
+            "CHARGE_STATE_NOT_READY_FOR_CHARGING",
+            language="it",
+        ),
+        "Non pronto per la ricarica",
+    )
+    check(
+        "window heating nl",
+        data.format_curated_value(
+            "window_heating_state",
+            "WINDOW_HEATING_STATE_OFF",
+            language="nl",
+        ),
+        "Uit",
+    )
+    check(
+        "charge state es",
+        data.format_curated_value(
+            "charging_state_report.current_charge_state",
+            "CHARGE_STATE_NOT_READY_FOR_CHARGING",
+            language="es",
+        ),
+        "No preparado para cargar",
+    )
 
     print()
     if failures:

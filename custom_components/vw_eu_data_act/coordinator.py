@@ -21,10 +21,17 @@ from .const import (
     NO_CONTENT_SUFFIX,
     POST_DATASET_BUFFER,
     RETRY_INTERVAL,
+    SERVER_ERROR_BACKOFF_INTERVALS,
 )
 from .data import Dataset, DataPoint
 
 _LOGGER = logging.getLogger(__name__)
+_SERVER_ERROR_CODES = ("HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504")
+
+
+def _is_server_error(err: Exception) -> bool:
+    """True for transient upstream 5xx errors worth backoff/retry."""
+    return any(code in str(err) for code in _SERVER_ERROR_CODES)
 
 
 def _filename_timestamp(name: str) -> datetime | None:
@@ -71,8 +78,38 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
         self.identifier: str = entry.data[CONF_IDENTIFIER]
         self.latest_dataset: Dataset | None = None
         self._is_initial_setup: bool = True
+        self._consecutive_server_errors: int = 0
+        self._listing_failed_server_error: bool = False
+        self.status_label: str = "starting"
+        self.empty_snapshot_count: int = 0
+        self.last_error: str | None = None
+
+    def _server_error_backoff_interval(self):
+        """Map consecutive 5xx count to 5 -> 15 -> 30 minute retry spacing."""
+        if self._consecutive_server_errors <= 0:
+            return RETRY_INTERVAL
+        index = min(
+            self._consecutive_server_errors - 1,
+            len(SERVER_ERROR_BACKOFF_INTERVALS) - 1,
+        )
+        return SERVER_ERROR_BACKOFF_INTERVALS[index]
+
+    def _note_server_error(self) -> None:
+        """Increase 5xx streak and slow down polling progressively."""
+        self._consecutive_server_errors += 1
+        self.update_interval = self._server_error_backoff_interval()
+        _LOGGER.debug(
+            "Portal server error streak %d; next retry in %s",
+            self._consecutive_server_errors,
+            self.update_interval,
+        )
+
+    def _reset_server_error_backoff(self) -> None:
+        """Return to normal scheduling after a successful portal response."""
+        self._consecutive_server_errors = 0
 
     async def _async_update_data(self) -> dict[str, DataPoint]:
+        self.status_label = "updating"
         listing = await self._async_list_with_refresh()
 
         # content datasets, oldest -> newest by createdOn
@@ -84,10 +121,19 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
             ),
             key=lambda e: _created_on(e) or datetime.min.replace(tzinfo=timezone.utc),
         )
+        empty_only = [
+            e for e in listing if e.get("name", "").endswith(NO_CONTENT_SUFFIX)
+        ]
         _LOGGER.debug("refresh: %d listed, %d with content", len(listing), len(content))
 
         if not content:
-            self._reschedule(listing)
+            self.empty_snapshot_count = len(empty_only)
+            if not self._listing_failed_server_error:
+                self.status_label = (
+                    "empty_snapshots" if empty_only else "waiting_for_portal_data"
+                )
+            if not self._listing_failed_server_error:
+                self._reschedule(listing)
             if self.data:
                 # Subsequent refresh: keep previous data
                 _LOGGER.debug("No new datasets available, keeping previous data")
@@ -117,10 +163,8 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
                     break  # Success!
                 except ApiError as err:
                     last_error = err
-                    is_server_error = any(
-                        code in str(err)
-                        for code in ["HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504"]
-                    )
+                    self.last_error = str(err)
+                    is_server_error = _is_server_error(err)
 
                     if is_server_error and attempt < max_retries - 1:
                         _LOGGER.debug(
@@ -150,22 +194,27 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
             if last_error is None:
                 break
 
-            if last_error and not any(
-                code in str(last_error)
-                for code in ["HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504"]
-            ):
+            if last_error and not _is_server_error(last_error):
                 break
 
         # If all downloads failed
         if last_error:
-            self.update_interval = RETRY_INTERVAL
+            is_server_error = _is_server_error(last_error)
+            self.last_error = str(last_error)
+            self.status_label = "download_failed"
+            if is_server_error:
+                self._note_server_error()
+                self.status_label = "server_error"
+            else:
+                self.update_interval = RETRY_INTERVAL
             if self.data:
                 # Subsequent refresh: keep previous data on failure
                 _LOGGER.debug(
                     "Could not download any dataset (last error: %s), keeping previous data",
                     last_error,
                 )
-                self._reschedule(listing)
+                if not is_server_error:
+                    self._reschedule(listing)
                 return self.data
             # First load failure: raise so HA retries setup
             _LOGGER.error(
@@ -177,6 +226,10 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
                 f"Failed to download dataset on first load: {last_error}"
             ) from last_error
 
+        self._reset_server_error_backoff()
+        self.status_label = "ok"
+        self.empty_snapshot_count = 0
+        self.last_error = None
         self._reschedule(listing)
 
         # Merge new data with existing to preserve missing fields
@@ -197,6 +250,8 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
         identifier from the metadata endpoint and retry once before giving up —
         so it recovers on the next cycle without needing a manual reload.
         """
+        self._listing_failed_server_error = False
+
         # Use fewer, faster retries during initial setup
         max_retries = 3 if self._is_initial_setup else 5
         retry_delay = 3 if self._is_initial_setup else 5
@@ -219,18 +274,19 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
                             "Empty listing, retrying with refreshed identifier"
                         )
                         break  # Break inner loop to retry with new identifier
+                    self._reset_server_error_backoff()
                     return listing
 
                 except AuthError as err:
                     self.update_interval = RETRY_INTERVAL
+                    self.status_label = "auth_failed"
+                    self.last_error = str(err)
                     raise UpdateFailed(f"Authentication failed: {err}") from err
 
                 except ApiError as err:
                     last_error = err
-                    is_server_error = any(
-                        code in str(err)
-                        for code in ["HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504"]
-                    )
+                    self.last_error = str(err)
+                    is_server_error = _is_server_error(err)
 
                     # Retry server errors with delay
                     if is_server_error and attempt < max_retries - 1:
@@ -251,10 +307,15 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
 
             # All attempts failed
             if last_error:
-                self.update_interval = RETRY_INTERVAL
+                is_server_error = _is_server_error(last_error)
+                if is_server_error:
+                    self._note_server_error()
+                else:
+                    self.update_interval = RETRY_INTERVAL
 
                 # HTTP 400 special case
                 if "HTTP 400" in str(last_error):
+                    self.status_label = "delivery_not_ready"
                     raise UpdateFailed(
                         "Data delivery not ready yet (HTTP 400). If you just enabled "
                         "the continuous data request on the portal, it can take a few "
@@ -262,11 +323,9 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
                     ) from last_error
 
                 # Server errors with existing data - return empty to keep old data
-                is_server_error = any(
-                    code in str(last_error)
-                    for code in ["HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504"]
-                )
                 if is_server_error and self.data:
+                    self._listing_failed_server_error = True
+                    self.status_label = "listing_failed"
                     _LOGGER.error(
                         "Failed to list datasets after %d attempts: %s. Keeping previous data.",
                         max_retries,
@@ -275,6 +334,7 @@ class EudaCoordinator(DataUpdateCoordinator[dict[str, DataPoint]]):
                     return []
 
                 # Other errors or first load: raise UpdateFailed
+                self.status_label = "listing_failed"
                 raise UpdateFailed(str(last_error)) from last_error
 
         return []

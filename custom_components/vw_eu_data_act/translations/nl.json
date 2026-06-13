@@ -1,0 +1,602 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "VW Group EU Data Act",
+        "description": "Selecteer het merk van je voertuig.",
+        "data": {
+          "brand": "Merk"
+        }
+      },
+      "credentials": {
+        "title": "Aanmelden",
+        "description": "Voer je VW-ID-inloggegevens in (zoals op eu-data-act.drivesomethinggreater.com).",
+        "data": {
+          "email": "E-mail",
+          "password": "Wachtwoord"
+        }
+      },
+      "vehicle": {
+        "title": "Voertuig selecteren",
+        "data": {
+          "vin": "Voertuig"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Opnieuw aanmelden",
+        "description": "Voer het wachtwoord in voor {email}.",
+        "data": {
+          "password": "Wachtwoord"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Ongeldig e-mailadres of wachtwoord voor het geselecteerde merk.",
+      "cannot_connect": "Kan geen verbinding maken met het EU Data Act-portaal.",
+      "no_vehicles": "Geen voertuigen gevonden voor dit account.",
+      "unknown": "Er is een onverwachte fout opgetreden."
+    },
+    "abort": {
+      "already_configured": "Dit voertuig is al geconfigureerd.",
+      "auth": "Authenticatie mislukt; voeg de integratie opnieuw toe.",
+      "reauth_successful": "Opnieuw aanmelden geslaagd."
+    }
+  },
+  "exceptions": {
+    "waiting_for_portal_data": {
+      "message": "Aanmelding geslaagd — wachten op de eerste voertuiggegevens van het EU Data Act-portaal. Dit is normaal direct na de installatie en is geen aanmeldingsfout.\n\nControleer op het portaal ({portal_url}):\n• Een continue gegevensaanvraag van 15 minuten is actief voor dit voertuig\n• Het voertuig is gekoppeld onder Data clusters → Vehicle overview\n• De auto was recent online (contact aan of mobiele app)\n\nEchte gegevens komen vaak binnen 15–60 minuten, soms pas enkele uren na het activeren van de aanvraag. Lege _no_content_found-momentopnames zijn normaal wanneer de auto in een venster van 15 minuten geen telemetrie heeft verzonden; ze worden automatisch overgeslagen.\n\nHome Assistant probeert het elke {retry_minutes} minuut/minuten opnieuw. Je hoeft de integratie niet te verwijderen en opnieuw toe te voegen."
+    },
+    "waiting_for_portal_data_empty_snapshots": {
+      "message": "Aanmelding geslaagd — de portaal-aanvraag is actief, maar tot nu toe zijn alleen lege momentopnames ontvangen ({empty_count} × _no_content_found). Het voertuig heeft in die vensters van 15 minuten nog geen telemetrie verzonden.\n\nDit is geen Home Assistant- of aanmeldingsfout. Controleer op het portaal ({portal_url}) of de continue 15-minuten-aanvraag voor dit VIN is ingeschakeld en activeer de auto (rijden, contact of open de mobiele app) zodat deze gegevens kan uploaden.\n\nHet volgende interval kan echte waarden bevatten. Home Assistant probeert het elke {retry_minutes} minuut/minuten opnieuw — verwijder de integratie niet."
+    },
+    "delivery_not_ready": {
+      "message": "Aanmelding geslaagd — gegevenslevering is nog niet gereed (HTTP 400). Als je de continue 15-minuten-aanvraag op het portaal ({portal_url}) net hebt aangemaakt, kan het backend enkele uren duren voordat ZIP-bestanden worden geleverd.\n\nHome Assistant probeert het elke {retry_minutes} minuut/minuten opnieuw. Dit is geen probleem met inloggegevens."
+    },
+    "config_entry_not_found": {
+      "message": "Geen VW Group EU Data Act-configuratie gevonden voor het geselecteerde voertuig."
+    },
+    "no_config_entries": {
+      "message": "Er zijn geen VW Group EU Data Act-voertuigen geconfigureerd."
+    },
+    "no_loaded_entries": {
+      "message": "De integratie voor het geselecteerde voertuig is niet geladen."
+    }
+  },
+  "services": {
+    "refresh_now": {
+      "name": "Nu vernieuwen",
+      "description": "Vraag het EU Data Act-portaal direct op naar een nieuwe dataset, zonder te wachten op de volgende geplande poll.",
+      "fields": {
+        "config_entry": {
+          "name": "Voertuig",
+          "description": "Te vernieuwen voertuig. Laat leeg om alle geconfigureerde voertuigen te vernieuwen."
+        }
+      }
+    }
+  },
+  "issues": {
+    "delivery_not_ready": {
+      "title": "Gegevenslevering nog niet gereed voor {vehicle}",
+      "description": "Het EU Data Act-portaal levert nog geen datasets voor dit voertuig (HTTP 400). Als je de continue 15-minuten-aanvraag net hebt aangemaakt, kan activering enkele uren duren.\n\nOpen het portaal ({portal_url}) en controleer het abonnement. Home Assistant probeert het elke {retry_minutes} minuut/minuten opnieuw. Geen inlogprobleem."
+    },
+    "waiting_for_portal_data": {
+      "title": "Wachten op eerste dataset voor {vehicle}",
+      "description": "Aanmelding geslaagd maar nog geen dataset ontvangen. Controleer op het portaal ({portal_url}) of een continue 15-minuten-aanvraag actief is, het voertuig gekoppeld is onder Data clusters en recent online was.\n\nEerste gegevens komen vaak binnen 15–60 minuten. Home Assistant probeert het elke {retry_minutes} minuut/minuten opnieuw."
+    },
+    "empty_snapshots": {
+      "title": "Alleen lege momentopnames voor {vehicle}",
+      "description": "Portaal-abonnement is actief maar tot nu toe alleen lege momentopnames ontvangen ({empty_count} × _no_content_found). Activeer de auto (rijden, contact of app) om telemetrie te uploaden.\n\nHome Assistant probeert het elke {retry_minutes} minuut/minuten opnieuw. Portaal: {portal_url}"
+    },
+    "listing_failed": {
+      "title": "Kan datasets niet opvragen voor {vehicle}",
+      "description": "Home Assistant kon geen datasets op het EU Data Act-portaal ({portal_url}) opvragen — meestal een tijdelijke storing (HTTP 5xx), geen inlog- of abonnementsprobleem.\n\nDe laatst bekende voertuigwaarden blijven behouden. Herhaalde fouten vertragen automatisch de pogingen (5 → 15 → 30 minuten). Volgende poging over ongeveer {retry_minutes} minuut/minuten."
+    },
+    "subscription_expiring_soon": {
+      "title": "Portaalabonnement verloopt binnenkort voor {vehicle}",
+      "description": "Het EU Data Act-portaalabonnement verloopt naar schatting over {days_until} dag(en). Het continue dataverzoek moet op het portaal worden verlengd, anders stoppen de datasets.\n\nOpen het portaal ({portal_url}) en verleng het abonnement voordat het verloopt."
+    },
+    "stale_snapshot": {
+      "title": "Geen recente voertuiggegevens voor {vehicle}",
+      "description": "De laatste echte voertuigmomentopname is ongeveer {hours_since} uur oud ({minutes_since} minuten). De auto is mogelijk offline of het portaal levert geen nieuwe datasets meer.\n\nActiveer de auto (rijden, contact of app) en controleer of het continue verzoek actief is op het portaal ({portal_url})."
+    }
+  },
+  "entity": {
+    "button": {
+      "refresh": {
+        "name": "Nu vernieuwen"
+      }
+    },
+    "sensor": {
+      "battery_state_report_soc": {
+        "name": "Accu"
+      },
+      "settings_target_soc": {
+        "name": "Laaddoel"
+      },
+      "battery_state_report_charge_bulk_threshold": {
+        "name": "Bulk-laaddrempel"
+      },
+      "battery_state_report_charge_power": {
+        "name": "Laadvermogen"
+      },
+      "battery_state_report_charge_rate": {
+        "name": "Laadsnelheid"
+      },
+      "battery_state_report_charge_energy": {
+        "name": "Geladen energie"
+      },
+      "battery_state_report_remaining_charging_time_complete": {
+        "name": "Resterende laadtijd"
+      },
+      "battery_state_report_remaining_charging_time_bulk": {
+        "name": "Resterende tijd tot bulk"
+      },
+      "energy_contents_current_energy_content_physical_value": {
+        "name": "Accu-energie"
+      },
+      "energy_contents_maximal_energy_content_physical_value": {
+        "name": "Accucapaciteit"
+      },
+      "battery_care_mode_charge_bcam_threshold": {
+        "name": "BCAM-laaddrempel"
+      },
+      "charging_state_report_error_code": {
+        "name": "Laadfoutcode"
+      },
+      "mileage_value": {
+        "name": "Kilometerstand"
+      },
+      "range_value": {
+        "name": "Elektrisch bereik"
+      },
+      "value_of_the_primary_range": {
+        "name": "Elektrisch bereik"
+      },
+      "remaining_climate_time": {
+        "name": "Resterende klimaattijd"
+      },
+      "residual_energy_in_percent": {
+        "name": "Restenergie"
+      },
+      "additional_consumptions_residual_consumption": {
+        "name": "Restverbruik"
+      },
+      "additional_consumptions_interior_climatization_consumption": {
+        "name": "Klimaatverbruik"
+      },
+      "slope_consumption_values_ascent_slope_consumption_physical_value": {
+        "name": "Verbruik bergop"
+      },
+      "slope_consumption_values_descent_slope_consumption_physical_value": {
+        "name": "Verbruik bergaf"
+      },
+      "outdoor_temperature": {
+        "name": "Buitentemperatuur"
+      },
+      "min_temperature": {
+        "name": "Accu min-temperatuur"
+      },
+      "max_temperature": {
+        "name": "Accu max-temperatuur"
+      },
+      "mileage_value_timestamp": {
+        "name": "Laatst verbonden"
+      },
+      "car_captured_time": {
+        "name": "Laatste telemetrie"
+      },
+      "instrument_cluster_time": {
+        "name": "Voertuigklok"
+      },
+      "hv_battery_level": {
+        "name": "HV-accuniveau"
+      },
+      "bem_level": {
+        "name": "BEM-niveau"
+      },
+      "mileage": {
+        "name": "Kilometerstand"
+      },
+      "cruising_range_combined": {
+        "name": "Bereik (gecombineerd)"
+      },
+      "cruising_range_primary_engine": {
+        "name": "Bereik (primair)"
+      },
+      "cruising_range_secondary_engine": {
+        "name": "Bereik (secundair)"
+      },
+      "range": {
+        "name": "Elektrisch bereik"
+      },
+      "scr_range": {
+        "name": "SCR-bereik"
+      },
+      "state_of_charge": {
+        "name": "Accu"
+      },
+      "remaining_charging_time": {
+        "name": "Resterende laadtijd"
+      },
+      "charged_energy": {
+        "name": "Totaal geladen energie"
+      },
+      "fuel_level_current_level": {
+        "name": "Brandstofniveau"
+      },
+      "fuel_level__accuracy": {
+        "name": "Brandstofniveau-nauwkeurigheid"
+      },
+      "cng_gas_level": {
+        "name": "CNG-gasniveau"
+      },
+      "outside_temperature": {
+        "name": "Buitentemperatuur"
+      },
+      "tyre_pressure_actual_front_left": {
+        "name": "Bandenspanning LV"
+      },
+      "tyre_pressure_actual_front_right": {
+        "name": "Bandenspanning RV"
+      },
+      "tyre_pressure_actual_rear_left": {
+        "name": "Bandenspanning LA"
+      },
+      "tyre_pressure_actual_rear_right": {
+        "name": "Bandenspanning RA"
+      },
+      "tyre_pressure_actual_spare_tyre": {
+        "name": "Bandenspanning reserve"
+      },
+      "tyre_pressure_differential_front_left": {
+        "name": "Spanningverschil LV"
+      },
+      "tyre_pressure_differential_front_right": {
+        "name": "Spanningverschil RV"
+      },
+      "tyre_pressure_differential_rear_left": {
+        "name": "Spanningverschil LA"
+      },
+      "tyre_pressure_differential_rear_right": {
+        "name": "Spanningverschil RA"
+      },
+      "tyre_pressure_differential_spare_tyre": {
+        "name": "Spanningverschil reserve"
+      },
+      "position_front_left_door_window_lifter": {
+        "name": "Raampositie LV"
+      },
+      "position_front_right_door_window_lifter": {
+        "name": "Raampositie RV"
+      },
+      "position_rear_left_door_window_lifter": {
+        "name": "Raampositie LA"
+      },
+      "position_rear_right_door_window_lifter": {
+        "name": "Raampositie RA"
+      },
+      "position_sunroof_motor_hood_1": {
+        "name": "Schuifdakpositie"
+      },
+      "maintenance_interval__time_until_inspection": {
+        "name": "Inspectie-interval"
+      },
+      "maintenance_interval__time_until_oil_change": {
+        "name": "Oliebeurt-interval"
+      },
+      "maintenance_interval_distance_until_inspection": {
+        "name": "Inspectie (afstand)"
+      },
+      "maintenance_interval_distance_until_oil_change": {
+        "name": "Oliebeurt (afstand)"
+      },
+      "long_term_data_mileage": {
+        "name": "Afstand rit (lang)"
+      },
+      "long_term_data_start_mileage": {
+        "name": "Start-km (lang)"
+      },
+      "long_term_data_average_fuel_consumption": {
+        "name": "Gem. verbruik benzine (lang)"
+      },
+      "long_term_data_average_electr_engine_consumption": {
+        "name": "Gem. verbruik stroom (lang)"
+      },
+      "long_term_data_average_speed": {
+        "name": "Gem. snelheid (lang)"
+      },
+      "long_term_data_travel_time": {
+        "name": "Rijtijd (lang)"
+      },
+      "short_term_data_mileage": {
+        "name": "Afstand rit (kort)"
+      },
+      "short_term_data_start_mileage": {
+        "name": "Start-km (kort)"
+      },
+      "short_term_data_average_fuel_consumption": {
+        "name": "Gem. verbruik benzine (kort)"
+      },
+      "short_term_data_average_electr_engine_consumption": {
+        "name": "Gem. verbruik stroom (kort)"
+      },
+      "short_term_data_travel_time": {
+        "name": "Rijtijd (kort)"
+      },
+      "oil_level_actual_level": {
+        "name": "Oliepeil"
+      },
+      "oil_level_additional_oil_level": {
+        "name": "Extra oliepeil"
+      },
+      "oil_level_total_max": {
+        "name": "Max. oliepeil"
+      },
+      "oil_level_dipstick_indicator_function": {
+        "name": "Oliemeter-indicator"
+      },
+      "mileage_timestamp": {
+        "name": "Laatst verbonden"
+      },
+      "last_charge_kwh": {
+        "name": "Laatste lading"
+      },
+      "days_until_subscription_expires": {
+        "name": "Dagen tot abonnement verloopt"
+      },
+      "minutes_since_last_snapshot": {
+        "name": "Minuten sinds laatste snapshot"
+      },
+      "last_vehicle_update": {
+        "name": "Laatste voertuigupdate"
+      },
+      "last_connected": {
+        "name": "Laatst verbonden"
+      },
+      "dataset_generated": {
+        "name": "Dataset gegenereerd"
+      },
+      "uncurated_fields_count": {
+        "name": "Niet-gecureerde velden"
+      },
+      "integration_status": {
+        "name": "Integratiestatus",
+        "state": {
+          "starting": "Opstarten",
+          "ok": "OK",
+          "waiting_for_portal_data": "Wachten op gegevens",
+          "empty_snapshots": "Alleen lege momentopnames",
+          "delivery_not_ready": "Levering niet gereed",
+          "listing_failed": "Ophalen mislukt"
+        }
+      },
+      "charge_state": {
+        "name": "Laadstatus",
+        "state": {
+          "CHARGE_STATE_READY_FOR_CHARGING": "Klaar om te laden",
+          "CHARGE_STATE_NOT_READY_FOR_CHARGING": "Niet gereed",
+          "CHARGE_STATE_CHARGING_HV_BATTERY": "Laadt HV-accu",
+          "CHARGE_STATE_CONSERVATION_CHARGING": "Behoudlading",
+          "CHARGE_STATE_DISCHARGING": "Ontladen",
+          "CHARGE_STATE_CHARGING_ERROR": "Laadfout",
+          "CHARGE_STATE_CHARGE_PURPOSE_REACHED_AND_CONSERVATION": "Doel bereikt (behoud)",
+          "CHARGE_STATE_CHARGE_PURPOSE_REACHED_AND_NOT_CONSERVATION_CHARGING": "Doel bereikt"
+        }
+      },
+      "charge_mode": {
+        "name": "Laadmodus",
+        "state": {
+          "CHARGE_MODE_IMMEDIATELY_DEFAULT": "Direct (standaard)",
+          "CHARGE_MODE_IMMEDIATELY_PROFILE": "Direct (profiel)",
+          "CHARGE_MODE_IMMEDIATELY_STOPPED": "Direct gestopt",
+          "CHARGE_MODE_EXTENDED_PROFILE": "Verlengd (profiel)",
+          "CHARGE_MODE_EXTENDED_STOPPED": "Verlengd gestopt",
+          "CHARGE_MODE_INVALID": "Ongeldig"
+        }
+      },
+      "charge_type": {
+        "name": "Laadtype",
+        "state": {
+          "CHARGE_TYPE_AC": "AC",
+          "CHARGE_TYPE_DC": "DC",
+          "CHARGE_TYPE_OFF": "Uit"
+        }
+      },
+      "charging_scenario": {
+        "name": "Laadscenario",
+        "state": {
+          "CHARGING_SCENARIO_OFF": "Uit",
+          "CHARGING_SCENARIO_IMMEDIATELY_CHARGING_ACTIVE": "Direct laden actief",
+          "CHARGING_SCENARIO_IMMEDIATELY_CHARGING_FINISHED": "Direct laden voltooid",
+          "CHARGING_SCENARIO_CHARGING_TO_DEPARTURE_TIME_ACTIVE": "Laden tot vertrek",
+          "CHARGING_SCENARIO_CHARGING_TO_DEPARTURE_TIME_FINISHED": "Vertrekladen voltooid",
+          "CHARGING_SCENARIO_OPTIMISED_CHARGING_AC": "Geoptimaliseerd AC-laden",
+          "CHARGING_SCENARIO_OPTIMISED_CHARGING_FINISHED": "Geoptimaliseerd laden voltooid"
+        }
+      },
+      "immediate_action_state": {
+        "name": "Laadactiestatus",
+        "state": {
+          "IMMEDIATE_ACTION_STATE_INVALID": "Ongeldig",
+          "IMMEDIATE_ACTION_STATE_IMMEDIATE_CHARGING": "Direct laden",
+          "IMMEDIATE_ACTION_STATE_IMMEDIATE_ACTION_TIME": "Actie: tijd",
+          "IMMEDIATE_ACTION_STATE_IMMEDIATE_ACTION_STOPPED": "Actie gestopt",
+          "IMMEDIATE_ACTION_STATE_IMMEDIATE_ACTION_RANGE": "Actie: bereik",
+          "IMMEDIATE_ACTION_STATE_IMMEDIATE_ACTION_SOC": "Actie: laadstatus",
+          "IMMEDIATE_ACTION_STATE_CHARGE_MODE_SELECTION": "Moduskeuze"
+        }
+      },
+      "charge_mode_selection": {
+        "name": "Laadmodusselectie",
+        "state": {
+          "CHARGE_MODE_SELECTION_INVALID": "Ongeldig",
+          "CHARGE_MODE_SELECTION_IMMEDIATECHARGING": "Direct laden",
+          "CHARGE_MODE_SELECTION_IMMEDIATE_DISCHARGING": "Direct ontladen",
+          "CHARGE_MODE_SELECTION_TIMERCHARGING": "Timerladen",
+          "CHARGE_MODE_SELECTION_TIMER_CHARGING_CLIMATIZATION": "Timer + klimaat",
+          "CHARGE_MODE_SELECTION_PREFERRED_CHARGING_TIMES": "Voorkeurstijden",
+          "CHARGE_MODE_SELECTION_ONLY_OWN_CURRENT": "Alleen eigen stroom",
+          "CHARGE_MODE_SELECTION_HOME_STORAGE_CHARGING": "Thuisopslag"
+        }
+      },
+      "max_ac_charge_current": {
+        "name": "Max. AC-laadstroom",
+        "state": {
+          "MAX_CHARGE_CURRENT_INVALID": "Ongeldig",
+          "MAX_CHARGE_CURRENT_MAXIMUM": "Maximum",
+          "MAX_CHARGE_CURRENT_REDUCED": "Verminderd"
+        }
+      },
+      "auto_unlock_ac": {
+        "name": "AC automatisch ontgrendelen",
+        "state": {
+          "AUTO_UNLOCK_AC_INVALID": "Ongeldig",
+          "AUTO_UNLOCK_AC_OFF": "Uit",
+          "AUTO_UNLOCK_AC_ONCE": "Eenmalig",
+          "AUTO_UNLOCK_AC_PERMANENT": "Permanent"
+        }
+      },
+      "bcam_activation": {
+        "name": "BCAM-activering",
+        "state": {
+          "BCAM_ACTIVATION_ACTIVATED": "Geactiveerd",
+          "BCAM_ACTIVATION_DEACTIVATED": "Gedeactiveerd"
+        }
+      },
+      "charging_timer_reachability": {
+        "name": "Laadtimer haalbaarheid",
+        "state": {
+          "TARGET_REACHABILITY_CALCULATING": "Berekenen",
+          "TARGET_REACHABILITY_REACHABLE": "Haalbaar",
+          "TARGET_REACHABILITY_NOT_REACHABLE": "Niet haalbaar"
+        }
+      },
+      "window_heating_state": {
+        "name": "Ruitverwarming",
+        "state": {
+          "WINDOW_HEATING_STATE_OFF": "Uit",
+          "WINDOW_HEATING_STATE_ON": "Aan"
+        }
+      }
+    },
+    "binary_sensor": {
+      "locked": {
+        "name": "Voertuig vergrendeld"
+      },
+      "open": {
+        "name": "Voertuig open"
+      },
+      "parking_brake": {
+        "name": "Parkeerrem"
+      },
+      "parking_light_left": {
+        "name": "Stadslicht links"
+      },
+      "parking_light_right": {
+        "name": "Stadslicht rechts"
+      },
+      "charge_mode_selection_options_immediate_charging": {
+        "name": "Direct laden"
+      },
+      "charge_mode_selection_options_immediate_discharging": {
+        "name": "Direct ontladen"
+      },
+      "charge_mode_selection_options_timer_charging": {
+        "name": "Timerladen"
+      },
+      "charge_mode_selection_options_timer_charging_climatization": {
+        "name": "Timerladen met klimaat"
+      },
+      "charge_mode_selection_options_home_storage_charging": {
+        "name": "Thuisopslag laden"
+      },
+      "charge_mode_selection_options_only_own_current": {
+        "name": "Alleen eigen stroom"
+      },
+      "charge_mode_selection_options_preferred_charging_times": {
+        "name": "Voorkeurslaadtijden"
+      },
+      "locked_state_front_left_door": {
+        "name": "Deurslot voor links"
+      },
+      "locked_state_front_right_door": {
+        "name": "Deurslot voor rechts"
+      },
+      "locked_state__rear_left_door": {
+        "name": "Deurslot achter links"
+      },
+      "locked_state_rear_right_door": {
+        "name": "Deurslot achter rechts"
+      },
+      "locked_state_tailgate": {
+        "name": "Achterklepvergrendeling"
+      },
+      "locked_state_front_engine_bonnet": {
+        "name": "Motorkapslot"
+      },
+      "open_state_front_left_door": {
+        "name": "Deur voor links"
+      },
+      "open_state_front_right_door": {
+        "name": "Deur voor rechts"
+      },
+      "open_state_rear_left_door": {
+        "name": "Deur achter links"
+      },
+      "open_state_rear_right_door": {
+        "name": "Deur achter rechts"
+      },
+      "open_state_tailgate": {
+        "name": "Achterklep"
+      },
+      "open_state_front_engine_bonnet": {
+        "name": "Motorkap"
+      },
+      "safe_state_front_right_door": {
+        "name": "Deur voor rechts veilig"
+      },
+      "safe_state_rear_left_door": {
+        "name": "Deur achter links veilig"
+      },
+      "safe_state_rear_right_door": {
+        "name": "Deur achter rechts veilig"
+      },
+      "safe_state_tailgate": {
+        "name": "Achterklep veilig"
+      },
+      "safe_state_front_engine_bonnet": {
+        "name": "Motorkap veilig"
+      },
+      "state_front_left_door_window_lifter": {
+        "name": "Raam voor links"
+      },
+      "state_front_right_door_window_lifter": {
+        "name": "Raam voor rechts"
+      },
+      "state_rear_left_door_window_lifter": {
+        "name": "Raam achter links"
+      },
+      "state_rear_right_door_window_lifter": {
+        "name": "Raam achter rechts"
+      },
+      "state_sunroof_motor_hood_1": {
+        "name": "Schuifdak"
+      },
+      "state_sunroof_motor_hood_3": {
+        "name": "Schuifdakmotor 3"
+      },
+      "parking_lights": {
+        "name": "Stadslichten"
+      },
+      "state_of_hood": {
+        "name": "Motorkapstatus"
+      },
+      "state_service_hatch": {
+        "name": "Serviceklep"
+      },
+      "state_spoiler": {
+        "name": "Spoiler"
+      }
+    }
+  }
+}

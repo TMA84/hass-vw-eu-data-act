@@ -57,7 +57,10 @@ _FLOAT_RE = re.compile(r"^-?\d+\.\d+$")
 def parse_duration_seconds(raw: str) -> float | None:
     """Parse values like "0s" / "1800s" into seconds."""
     m = _DURATION_RE.match(raw.strip())
-    return float(m.group(1)) if m else None
+    if not m:
+        return None
+    seconds = float(m.group(1))
+    return int(seconds) if seconds.is_integer() else seconds
 
 
 def sticky(previous, current):
@@ -116,6 +119,260 @@ def parse_value(raw: str | None, type_hint: str | None = None):
 
 _ENUM_TOKEN_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
+# Curated enum/status fields where raw UPPER_SNAKE labels should be displayed
+# as human-readable text in the UI.
+_ENUM_PREFIX_BY_FIELD: dict[str, str] = {
+    "charging_state_report.charge_mode": "CHARGE_MODE_",
+    "settings.charge_mode_selection": "CHARGE_MODE_SELECTION_",
+    "charging_state_report.current_charge_state": "CHARGE_STATE_",
+    "charging_state_report.immediate_action_state": "IMMEDIATE_ACTION_STATE_",
+    "charging_state_report.charging_scenario": "CHARGING_SCENARIO_",
+    "settings.max_charge_current_ac": "MAX_CHARGE_CURRENT_AC_",
+    "window_heating_state": "WINDOW_HEATING_STATE_",
+}
+
+# Some dictionary enum descriptions use alternate prefixes compared to runtime
+# payload values. Accept both so integer-enum fallback and string payloads map
+# to the same friendly labels.
+_ENUM_PREFIX_ALIASES_BY_FIELD: dict[str, tuple[str, ...]] = {
+    "settings.max_charge_current_ac": ("MAX_CHARGE_CURRENT_",),
+}
+
+_ENUM_SEGMENT_FIXUPS: dict[str, str] = {
+    "IMMEDIATECHARGING": "IMMEDIATE_CHARGING",
+    "TIMERCHARGING": "TIMER_CHARGING",
+    "DEFAULT": "(DEFAULT)",
+}
+
+# Localized labels for common curated enum/status tokens.
+_ENUM_LABELS_BY_LANG: dict[str, dict[str, str]] = {
+    "de": {
+    # Generic
+    "INVALID": "Ungültig",
+
+    # Charge mode
+    "IMMEDIATELY_STOPPED": "Sofortladen gestoppt",
+    "IMMEDIATELY_(DEFAULT)": "Sofort (Standard)",
+    "IMMEDIATELY_PROFILE": "Sofortladen (Profil)",
+    "EXTENDED_PROFILE": "Erweitertes Profil",
+    "EXTENDED_STOPPED": "Erweitertes Laden gestoppt",
+
+    # Charge mode selection
+    "TIMER_CHARGING": "Zeitgesteuertes Laden",
+    "IMMEDIATE_CHARGING": "Sofortladen",
+    "TIMER_CHARGING_CLIMATIZATION": "Zeitgesteuertes Laden mit Klimatisierung",
+    "PREFERRED_CHARGING_TIMES": "Bevorzugte Ladezeiten",
+    "ONLY_OWN_CURRENT": "Nur Eigenstrom",
+    "IMMEDIATE_DISCHARGING": "Sofort entladen",
+    "HOME_STORAGE_CHARGING": "Heimspeicher laden",
+
+    # Charge state
+    "NOT_READY_FOR_CHARGING": "Nicht ladebereit",
+    "READY_FOR_CHARGING": "Ladebereit",
+    "CHARGING_HV_BATTERY": "Hochvoltbatterie wird geladen",
+    "DISCHARGING": "Entlädt",
+    "CHARGE_PURPOSE_REACHED_AND_NOT_CONSERVATION_CHARGING": "Ladeziel erreicht (keine Erhaltungsladung)",
+    "CHARGE_PURPOSE_REACHED_AND_CONSERVATION": "Ladeziel erreicht (Erhaltung)",
+    "CONSERVATION_CHARGING": "Erhaltungsladung",
+    "CHARGING_ERROR": "Ladefehler",
+
+    # Immediate action state
+    "IMMEDIATE_ACTION_TIME": "Sofortaktion Zeit",
+    "IMMEDIATE_ACTION_STOPPED": "Sofortaktion gestoppt",
+    "IMMEDIATE_ACTION_RANGE": "Sofortaktion Reichweite",
+    "IMMEDIATE_ACTION_SOC": "Sofortaktion Ladezustand",
+    "CHARGE_MODE_SELECTION": "Lademodus-Auswahl",
+
+    # Charging scenario
+    "OFF": "Aus",
+    "ON": "Ein",
+    "CHARGING_TO_DEPARTURE_TIME_FINISHED": "Abfahrtszeit-Ladung abgeschlossen",
+    "IMMEDIATELY_CHARGING_FINISHED": "Sofortladen abgeschlossen",
+    "OPTIMISED_CHARGING_FINISHED": "Optimiertes Laden abgeschlossen",
+    "CHARGING_TO_DEPARTURE_TIME_ACTIVE": "Abfahrtszeit-Ladung aktiv",
+    "IMMEDIATELY_CHARGING_ACTIVE": "Sofortladen aktiv",
+    "OPTIMISED_CHARGING_ACTIVE": "Optimiertes Laden aktiv",
+    # Some dictionary extracts truncate ACTIVE to AC.
+    "OPTIMISED_CHARGING_AC": "Optimiertes Laden aktiv",
+
+    # AC max current
+    "REDUCED": "Reduziert",
+    "MAXIMUM": "Maximum",
+    },
+    "fr": {
+        "INVALID": "Invalide",
+        "IMMEDIATELY_STOPPED": "Charge immediate arretee",
+        "IMMEDIATELY_(DEFAULT)": "Charge immediate (par defaut)",
+        "IMMEDIATELY_PROFILE": "Charge immediate (profil)",
+        "EXTENDED_PROFILE": "Profil etendu",
+        "EXTENDED_STOPPED": "Charge etendue arretee",
+        "TIMER_CHARGING": "Charge planifiee",
+        "IMMEDIATE_CHARGING": "Charge immediate",
+        "TIMER_CHARGING_CLIMATIZATION": "Charge planifiee avec climatisation",
+        "PREFERRED_CHARGING_TIMES": "Heures de charge preferees",
+        "ONLY_OWN_CURRENT": "Courant propre uniquement",
+        "IMMEDIATE_DISCHARGING": "Decharge immediate",
+        "HOME_STORAGE_CHARGING": "Charge stockage domestique",
+        "NOT_READY_FOR_CHARGING": "Pas pret pour la charge",
+        "READY_FOR_CHARGING": "Pret pour la charge",
+        "CHARGING_HV_BATTERY": "Batterie HV en charge",
+        "DISCHARGING": "Decharge",
+        "CHARGE_PURPOSE_REACHED_AND_NOT_CONSERVATION_CHARGING": "Objectif de charge atteint (sans charge de maintien)",
+        "CHARGE_PURPOSE_REACHED_AND_CONSERVATION": "Objectif de charge atteint (maintien)",
+        "CONSERVATION_CHARGING": "Charge de maintien",
+        "CHARGING_ERROR": "Erreur de charge",
+        "IMMEDIATE_ACTION_TIME": "Action immediate heure",
+        "IMMEDIATE_ACTION_STOPPED": "Action immediate arretee",
+        "IMMEDIATE_ACTION_RANGE": "Action immediate autonomie",
+        "IMMEDIATE_ACTION_SOC": "Action immediate niveau de charge",
+        "CHARGE_MODE_SELECTION": "Selection du mode de charge",
+        "OFF": "Arret",
+        "ON": "Marche",
+        "CHARGING_TO_DEPARTURE_TIME_FINISHED": "Charge jusqu'a l'heure de depart terminee",
+        "IMMEDIATELY_CHARGING_FINISHED": "Charge immediate terminee",
+        "OPTIMISED_CHARGING_FINISHED": "Charge optimisee terminee",
+        "CHARGING_TO_DEPARTURE_TIME_ACTIVE": "Charge jusqu'a l'heure de depart active",
+        "IMMEDIATELY_CHARGING_ACTIVE": "Charge immediate active",
+        "OPTIMISED_CHARGING_ACTIVE": "Charge optimisee active",
+        "OPTIMISED_CHARGING_AC": "Charge optimisee active",
+        "REDUCED": "Reduit",
+        "MAXIMUM": "Maximum",
+    },
+    "it": {
+        "INVALID": "Non valido",
+        "IMMEDIATELY_STOPPED": "Ricarica immediata interrotta",
+        "IMMEDIATELY_(DEFAULT)": "Immediata (predefinito)",
+        "IMMEDIATELY_PROFILE": "Ricarica immediata (profilo)",
+        "EXTENDED_PROFILE": "Profilo esteso",
+        "EXTENDED_STOPPED": "Ricarica estesa interrotta",
+        "TIMER_CHARGING": "Ricarica programmata",
+        "IMMEDIATE_CHARGING": "Ricarica immediata",
+        "TIMER_CHARGING_CLIMATIZATION": "Ricarica programmata con climatizzazione",
+        "PREFERRED_CHARGING_TIMES": "Orari di ricarica preferiti",
+        "ONLY_OWN_CURRENT": "Solo corrente propria",
+        "IMMEDIATE_DISCHARGING": "Scarica immediata",
+        "HOME_STORAGE_CHARGING": "Ricarica accumulo domestico",
+        "NOT_READY_FOR_CHARGING": "Non pronto per la ricarica",
+        "READY_FOR_CHARGING": "Pronto per la ricarica",
+        "CHARGING_HV_BATTERY": "Batteria HV in carica",
+        "DISCHARGING": "In scarica",
+        "CHARGE_PURPOSE_REACHED_AND_NOT_CONSERVATION_CHARGING": "Obiettivo di carica raggiunto (senza mantenimento)",
+        "CHARGE_PURPOSE_REACHED_AND_CONSERVATION": "Obiettivo di carica raggiunto (mantenimento)",
+        "CONSERVATION_CHARGING": "Ricarica di mantenimento",
+        "CHARGING_ERROR": "Errore di ricarica",
+        "IMMEDIATE_ACTION_TIME": "Azione immediata temporizzata",
+        "IMMEDIATE_ACTION_STOPPED": "Azione immediata interrotta",
+        "IMMEDIATE_ACTION_RANGE": "Azione immediata autonomia",
+        "IMMEDIATE_ACTION_SOC": "Azione immediata stato di carica",
+        "CHARGE_MODE_SELECTION": "Selezione modalita di ricarica",
+        "OFF": "Spento",
+        "ON": "Acceso",
+        "CHARGING_TO_DEPARTURE_TIME_FINISHED": "Ricarica fino all'orario di partenza completata",
+        "IMMEDIATELY_CHARGING_FINISHED": "Ricarica immediata completata",
+        "OPTIMISED_CHARGING_FINISHED": "Ricarica ottimizzata completata",
+        "CHARGING_TO_DEPARTURE_TIME_ACTIVE": "Ricarica fino all'orario di partenza attiva",
+        "IMMEDIATELY_CHARGING_ACTIVE": "Ricarica immediata attiva",
+        "OPTIMISED_CHARGING_ACTIVE": "Ricarica ottimizzata attiva",
+        "OPTIMISED_CHARGING_AC": "Ricarica ottimizzata attiva",
+        "REDUCED": "Ridotto",
+        "MAXIMUM": "Massimo",
+    },
+    "nl": {
+        "INVALID": "Ongeldig",
+        "IMMEDIATELY_STOPPED": "Direct laden gestopt",
+        "IMMEDIATELY_(DEFAULT)": "Direct (standaard)",
+        "IMMEDIATELY_PROFILE": "Direct laden (profiel)",
+        "EXTENDED_PROFILE": "Uitgebreid profiel",
+        "EXTENDED_STOPPED": "Uitgebreid laden gestopt",
+        "TIMER_CHARGING": "Gepland laden",
+        "IMMEDIATE_CHARGING": "Direct laden",
+        "TIMER_CHARGING_CLIMATIZATION": "Gepland laden met klimaatregeling",
+        "PREFERRED_CHARGING_TIMES": "Voorkeur laadtijden",
+        "ONLY_OWN_CURRENT": "Alleen eigen stroom",
+        "IMMEDIATE_DISCHARGING": "Direct ontladen",
+        "HOME_STORAGE_CHARGING": "Thuisopslag laden",
+        "NOT_READY_FOR_CHARGING": "Niet klaar om te laden",
+        "READY_FOR_CHARGING": "Klaar om te laden",
+        "CHARGING_HV_BATTERY": "HV-accu wordt geladen",
+        "DISCHARGING": "Ontladen",
+        "CHARGE_PURPOSE_REACHED_AND_NOT_CONSERVATION_CHARGING": "Laaddoel bereikt (zonder onderhoudsladen)",
+        "CHARGE_PURPOSE_REACHED_AND_CONSERVATION": "Laaddoel bereikt (onderhoud)",
+        "CONSERVATION_CHARGING": "Onderhoudsladen",
+        "CHARGING_ERROR": "Laadfout",
+        "IMMEDIATE_ACTION_TIME": "Directe actie tijd",
+        "IMMEDIATE_ACTION_STOPPED": "Directe actie gestopt",
+        "IMMEDIATE_ACTION_RANGE": "Directe actie actieradius",
+        "IMMEDIATE_ACTION_SOC": "Directe actie laadniveau",
+        "CHARGE_MODE_SELECTION": "Laadmodusselectie",
+        "OFF": "Uit",
+        "ON": "Aan",
+        "CHARGING_TO_DEPARTURE_TIME_FINISHED": "Laden tot vertrektijd voltooid",
+        "IMMEDIATELY_CHARGING_FINISHED": "Direct laden voltooid",
+        "OPTIMISED_CHARGING_FINISHED": "Geoptimaliseerd laden voltooid",
+        "CHARGING_TO_DEPARTURE_TIME_ACTIVE": "Laden tot vertrektijd actief",
+        "IMMEDIATELY_CHARGING_ACTIVE": "Direct laden actief",
+        "OPTIMISED_CHARGING_ACTIVE": "Geoptimaliseerd laden actief",
+        "OPTIMISED_CHARGING_AC": "Geoptimaliseerd laden actief",
+        "REDUCED": "Verlaagd",
+        "MAXIMUM": "Maximum",
+    },
+    "es": {
+        "INVALID": "Invalido",
+        "IMMEDIATELY_STOPPED": "Carga inmediata detenida",
+        "IMMEDIATELY_(DEFAULT)": "Carga inmediata (predeterminada)",
+        "IMMEDIATELY_PROFILE": "Carga inmediata (perfil)",
+        "EXTENDED_PROFILE": "Perfil ampliado",
+        "EXTENDED_STOPPED": "Carga ampliada detenida",
+        "TIMER_CHARGING": "Carga programada",
+        "IMMEDIATE_CHARGING": "Carga inmediata",
+        "TIMER_CHARGING_CLIMATIZATION": "Carga programada con climatizacion",
+        "PREFERRED_CHARGING_TIMES": "Horarios de carga preferidos",
+        "ONLY_OWN_CURRENT": "Solo energia propia",
+        "IMMEDIATE_DISCHARGING": "Descarga inmediata",
+        "HOME_STORAGE_CHARGING": "Carga de almacenamiento domestico",
+        "NOT_READY_FOR_CHARGING": "No preparado para cargar",
+        "READY_FOR_CHARGING": "Preparado para cargar",
+        "CHARGING_HV_BATTERY": "Bateria HV cargando",
+        "DISCHARGING": "Descargando",
+        "CHARGE_PURPOSE_REACHED_AND_NOT_CONSERVATION_CHARGING": "Objetivo de carga alcanzado (sin carga de mantenimiento)",
+        "CHARGE_PURPOSE_REACHED_AND_CONSERVATION": "Objetivo de carga alcanzado (mantenimiento)",
+        "CONSERVATION_CHARGING": "Carga de mantenimiento",
+        "CHARGING_ERROR": "Error de carga",
+        "IMMEDIATE_ACTION_TIME": "Accion inmediata temporizada",
+        "IMMEDIATE_ACTION_STOPPED": "Accion inmediata detenida",
+        "IMMEDIATE_ACTION_RANGE": "Accion inmediata autonomia",
+        "IMMEDIATE_ACTION_SOC": "Accion inmediata nivel de carga",
+        "CHARGE_MODE_SELECTION": "Seleccion de modo de carga",
+        "OFF": "Apagado",
+        "ON": "Encendido",
+        "CHARGING_TO_DEPARTURE_TIME_FINISHED": "Carga hasta hora de salida finalizada",
+        "IMMEDIATELY_CHARGING_FINISHED": "Carga inmediata finalizada",
+        "OPTIMISED_CHARGING_FINISHED": "Carga optimizada finalizada",
+        "CHARGING_TO_DEPARTURE_TIME_ACTIVE": "Carga hasta hora de salida activa",
+        "IMMEDIATELY_CHARGING_ACTIVE": "Carga inmediata activa",
+        "OPTIMISED_CHARGING_ACTIVE": "Carga optimizada activa",
+        "OPTIMISED_CHARGING_AC": "Carga optimizada activa",
+        "REDUCED": "Reducido",
+        "MAXIMUM": "Maximo",
+    },
+}
+
+
+def _language_key(language: str | None) -> str:
+    """Normalize HA language tags to the supported short language key."""
+    lang = (language or "").lower()
+    if lang.startswith("de"):
+        return "de"
+    if lang.startswith("fr"):
+        return "fr"
+    if lang.startswith("it"):
+        return "it"
+    if lang.startswith("nl"):
+        return "nl"
+    if lang.startswith("es"):
+        return "es"
+    return "en"
+
 # Bare field names that are meaningless on their own; for these we name the
 # entity from the dictionary description instead.
 _GENERIC_FIELD_NAMES = {"value", "state", "unit", "is_set", "type", "id"}
@@ -149,6 +406,69 @@ def friendly_name(field_name: str, description: str | None = None) -> str:
         if text:
             return text[:60]
     return field_name
+
+
+def _humanize_enum_text(value: str) -> str:
+    """Convert enum token fragments like ``NOT_READY_FOR_CHARGING`` to text."""
+    token = value.strip().upper()
+    for old, new in _ENUM_SEGMENT_FIXUPS.items():
+        token = token.replace(old, new)
+    text = token.replace("_", " ").lower().strip()
+    text = re.sub(r"\s+", " ", text)
+    if not text:
+        return value
+    # Keep parenthesized suffixes lower-case title formatting intact.
+    parts = []
+    for part in text.split(" "):
+        if part.startswith("(") and part.endswith(")"):
+            parts.append(part.lower())
+        else:
+            parts.append(part.capitalize())
+    return " ".join(parts)
+
+
+def _normalize_enum_token(token: str) -> str:
+    """Normalize enum token spelling quirks before label formatting."""
+    normalized = token.strip().upper()
+    for old, new in _ENUM_SEGMENT_FIXUPS.items():
+        normalized = normalized.replace(old, new)
+    return normalized
+
+
+def _strip_enum_prefix(field_name: str, token: str) -> str:
+    """Strip known enum prefixes for a curated field, including aliases."""
+    prefixes: list[str] = []
+    primary = _ENUM_PREFIX_BY_FIELD.get(field_name)
+    if primary:
+        prefixes.append(primary)
+    prefixes.extend(_ENUM_PREFIX_ALIASES_BY_FIELD.get(field_name, ()))
+
+    for prefix in prefixes:
+        if token.startswith(prefix):
+            return token[len(prefix) :]
+    return token
+
+
+def format_curated_value(field_name: str, value, language: str | None = None):
+    """Return a UI-friendly value for selected curated enum/status fields."""
+    if not isinstance(value, str):
+        return value
+    if field_name not in _ENUM_PREFIX_BY_FIELD:
+        return value
+
+    token = value.strip().upper()
+    token = _strip_enum_prefix(field_name, token)
+
+    token = _normalize_enum_token(token)
+
+    if not _ENUM_TOKEN_RE.match(token) and "(" not in token:
+        return value
+
+    labels = _ENUM_LABELS_BY_LANG.get(_language_key(language), {})
+    if token in labels:
+        return labels[token]
+
+    return _humanize_enum_text(token)
 
 
 # ---------------------------------------------------------------------------

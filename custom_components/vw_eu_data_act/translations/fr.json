@@ -1,0 +1,602 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "VW Group EU Data Act",
+        "description": "Selectionnez la marque de votre vehicule.",
+        "data": {
+          "brand": "Marque"
+        }
+      },
+      "credentials": {
+        "title": "Connexion",
+        "description": "Saisissez vos identifiants VW-ID (comme sur eu-data-act.drivesomethinggreater.com).",
+        "data": {
+          "email": "E-mail",
+          "password": "Mot de passe"
+        }
+      },
+      "vehicle": {
+        "title": "Sélectionner le véhicule",
+        "data": {
+          "vin": "Véhicule"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Se réauthentifier",
+        "description": "Saisissez le mot de passe pour {email}.",
+        "data": {
+          "password": "Mot de passe"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "E-mail ou mot de passe invalide pour la marque sélectionnée.",
+      "cannot_connect": "Impossible de se connecter au portail EU Data Act.",
+      "no_vehicles": "Aucun véhicule trouvé pour ce compte.",
+      "unknown": "Une erreur inattendue s'est produite."
+    },
+    "abort": {
+      "already_configured": "Ce véhicule est déjà configuré.",
+      "auth": "Échec de l'authentification ; veuillez réajouter l'intégration.",
+      "reauth_successful": "Réauthentification réussie."
+    }
+  },
+  "exceptions": {
+    "waiting_for_portal_data": {
+      "message": "Connexion réussie — en attente de la première livraison de données du véhicule depuis le portail EU Data Act. C'est normal juste après la configuration et ce n'est pas une erreur de connexion.\n\nSur le portail ({portal_url}), veuillez vérifier :\n• Une demande de données continue de 15 minutes est active pour ce véhicule\n• Le véhicule est lié sous Data clusters → Vehicle overview\n• La voiture a été en ligne récemment (contact allumage ou application mobile)\n\nLes premières données réelles arrivent souvent sous 15 à 60 minutes, parfois quelques heures après l'activation de la demande. Les instantanés vides _no_content_found sont normaux lorsque la voiture n'a envoyé aucune télémétrie dans une fenêtre de 15 minutes ; ils sont ignorés automatiquement.\n\nHome Assistant réessaie toutes les {retry_minutes} minute(s). Il n'est pas nécessaire de supprimer et de réajouter l'intégration."
+    },
+    "waiting_for_portal_data_empty_snapshots": {
+      "message": "Connexion réussie — l'abonnement au portail est actif, mais seuls des instantanés vides ont été reçus jusqu'à présent ({empty_count} × _no_content_found). Le véhicule n'a encore envoyé aucune télémétrie dans ces fenêtres de 15 minutes.\n\nCe n'est pas une erreur Home Assistant ni de connexion. Sur le portail ({portal_url}), confirmez que la demande continue de 15 minutes est activée pour ce VIN et réveillez la voiture (conduire, contact allumé ou ouvrir l'application mobile) pour qu'elle puisse envoyer des données.\n\nLe prochain intervalle peut contenir de vraies valeurs. Home Assistant réessaie toutes les {retry_minutes} minute(s) — inutile de supprimer l'intégration."
+    },
+    "delivery_not_ready": {
+      "message": "Connexion réussie — la livraison des données n'est pas encore prête (HTTP 400). Si vous venez de créer la demande continue de 15 minutes sur le portail ({portal_url}), le backend peut mettre quelques heures avant de commencer à livrer des fichiers ZIP.\n\nHome Assistant réessaie toutes les {retry_minutes} minute(s). Ce n'est pas un problème d'identifiants."
+    },
+    "config_entry_not_found": {
+      "message": "Aucune entrée VW Group EU Data Act ne correspond au véhicule sélectionné."
+    },
+    "no_config_entries": {
+      "message": "Aucun véhicule VW Group EU Data Act n'est configuré."
+    },
+    "no_loaded_entries": {
+      "message": "L'intégration du véhicule sélectionné n'est pas chargée."
+    }
+  },
+  "services": {
+    "refresh_now": {
+      "name": "Actualiser maintenant",
+      "description": "Interroger immédiatement le portail EU Data Act pour un nouveau jeu de données, sans attendre le prochain cycle planifié.",
+      "fields": {
+        "config_entry": {
+          "name": "Véhicule",
+          "description": "Véhicule à actualiser. Laisser vide pour actualiser tous les véhicules configurés."
+        }
+      }
+    }
+  },
+  "issues": {
+    "delivery_not_ready": {
+      "title": "Livraison des données pas encore prête pour {vehicle}",
+      "description": "Le portail EU Data Act n'a pas encore commencé à livrer des jeux de données pour ce véhicule (HTTP 400). Si vous venez de créer la demande continue de 15 minutes, l'activation peut prendre quelques heures.\n\nOuvrez le portail ({portal_url}) et vérifiez l'abonnement. Home Assistant réessaie toutes les {retry_minutes} minute(s). Ce n'est pas un problème d'identifiants."
+    },
+    "waiting_for_portal_data": {
+      "title": "En attente du premier jeu de données pour {vehicle}",
+      "description": "Connexion réussie mais aucun jeu de données reçu. Sur le portail ({portal_url}), vérifiez qu'une demande continue de 15 minutes est active, que le véhicule est lié sous Data clusters et qu'il a été en ligne récemment.\n\nLes premières données arrivent souvent sous 15 à 60 minutes. Home Assistant réessaie toutes les {retry_minutes} minute(s)."
+    },
+    "empty_snapshots": {
+      "title": "Seulement des instantanés vides pour {vehicle}",
+      "description": "L'abonnement au portail est actif mais seuls des instantanés vides ont été reçus ({empty_count} × _no_content_found). Réveillez la voiture (conduire, contact allumé ou application) pour envoyer de la télémétrie.\n\nHome Assistant réessaie toutes les {retry_minutes} minute(s). Portail : {portal_url}"
+    },
+    "listing_failed": {
+      "title": "Impossible de lister les jeux de données pour {vehicle}",
+      "description": "Home Assistant n'a pas pu lister les jeux de données sur le portail EU Data Act ({portal_url}) — panne temporaire du portail (HTTP 5xx), pas un problème de connexion ou d'abonnement.\n\nLes dernières valeurs connues sont conservées. Les nouvelles tentatives ralentissent automatiquement (5 → 15 → 30 minutes). Prochaine tentative dans environ {retry_minutes} minute(s)."
+    },
+    "subscription_expiring_soon": {
+      "title": "Abonnement portail bientôt expiré pour {vehicle}",
+      "description": "L'abonnement au portail EU Data Act devrait expirer dans {days_until} jour(s). La demande de données continues doit être renouvelée sur le portail, sinon les jeux de données cesseront d'arriver.\n\nOuvrez le portail ({portal_url}) et renouvelez l'abonnement avant son expiration."
+    },
+    "stale_snapshot": {
+      "title": "Pas de données récentes du véhicule pour {vehicle}",
+      "description": "Le dernier instantané réel du véhicule date d'environ {hours_since} heure(s) ({minutes_since} minutes). La voiture est peut-être hors ligne ou le portail ne livre plus de nouveaux jeux de données.\n\nRéveillez la voiture (conduire, contact ou application) et vérifiez que la demande continue est active sur le portail ({portal_url})."
+    }
+  },
+  "entity": {
+    "button": {
+      "refresh": {
+        "name": "Actualiser maintenant"
+      }
+    },
+    "sensor": {
+      "battery_state_report_soc": {
+        "name": "Batterie"
+      },
+      "settings_target_soc": {
+        "name": "Niveau de charge cible"
+      },
+      "battery_state_report_charge_bulk_threshold": {
+        "name": "Seuil de charge bulk"
+      },
+      "battery_state_report_charge_power": {
+        "name": "Puissance de charge"
+      },
+      "battery_state_report_charge_rate": {
+        "name": "Vitesse de charge"
+      },
+      "battery_state_report_charge_energy": {
+        "name": "Énergie chargée"
+      },
+      "battery_state_report_remaining_charging_time_complete": {
+        "name": "Temps de charge restant"
+      },
+      "battery_state_report_remaining_charging_time_bulk": {
+        "name": "Temps restant jusqu'au bulk"
+      },
+      "energy_contents_current_energy_content_physical_value": {
+        "name": "Énergie batterie"
+      },
+      "energy_contents_maximal_energy_content_physical_value": {
+        "name": "Capacité batterie"
+      },
+      "battery_care_mode_charge_bcam_threshold": {
+        "name": "Seuil de charge BCAM"
+      },
+      "charging_state_report_error_code": {
+        "name": "Code erreur charge"
+      },
+      "mileage_value": {
+        "name": "Kilométrage"
+      },
+      "range_value": {
+        "name": "Autonomie électrique"
+      },
+      "value_of_the_primary_range": {
+        "name": "Autonomie électrique"
+      },
+      "remaining_climate_time": {
+        "name": "Temps clim restant"
+      },
+      "residual_energy_in_percent": {
+        "name": "Énergie résiduelle"
+      },
+      "additional_consumptions_residual_consumption": {
+        "name": "Consommation résiduelle"
+      },
+      "additional_consumptions_interior_climatization_consumption": {
+        "name": "Consommation climatisation"
+      },
+      "slope_consumption_values_ascent_slope_consumption_physical_value": {
+        "name": "Consommation montée"
+      },
+      "slope_consumption_values_descent_slope_consumption_physical_value": {
+        "name": "Consommation descente"
+      },
+      "outdoor_temperature": {
+        "name": "Température extérieure"
+      },
+      "min_temperature": {
+        "name": "Temp. min batterie"
+      },
+      "max_temperature": {
+        "name": "Temp. max batterie"
+      },
+      "mileage_value_timestamp": {
+        "name": "Dernière connexion"
+      },
+      "car_captured_time": {
+        "name": "Dernière télémétrie"
+      },
+      "instrument_cluster_time": {
+        "name": "Horloge véhicule"
+      },
+      "hv_battery_level": {
+        "name": "Niveau batterie HT"
+      },
+      "bem_level": {
+        "name": "Niveau BEM"
+      },
+      "mileage": {
+        "name": "Kilométrage"
+      },
+      "cruising_range_combined": {
+        "name": "Autonomie (combinée)"
+      },
+      "cruising_range_primary_engine": {
+        "name": "Autonomie (principale)"
+      },
+      "cruising_range_secondary_engine": {
+        "name": "Autonomie (secondaire)"
+      },
+      "range": {
+        "name": "Autonomie électrique"
+      },
+      "scr_range": {
+        "name": "Autonomie SCR"
+      },
+      "state_of_charge": {
+        "name": "Batterie"
+      },
+      "remaining_charging_time": {
+        "name": "Temps de charge restant"
+      },
+      "charged_energy": {
+        "name": "Énergie totale chargée"
+      },
+      "fuel_level_current_level": {
+        "name": "Niveau de carburant"
+      },
+      "fuel_level__accuracy": {
+        "name": "Précision niveau carburant"
+      },
+      "cng_gas_level": {
+        "name": "Niveau gaz CNG"
+      },
+      "outside_temperature": {
+        "name": "Température extérieure"
+      },
+      "tyre_pressure_actual_front_left": {
+        "name": "Pression pneu AVG"
+      },
+      "tyre_pressure_actual_front_right": {
+        "name": "Pression pneu AVD"
+      },
+      "tyre_pressure_actual_rear_left": {
+        "name": "Pression pneu ARG"
+      },
+      "tyre_pressure_actual_rear_right": {
+        "name": "Pression pneu ARD"
+      },
+      "tyre_pressure_actual_spare_tyre": {
+        "name": "Pression pneu secours"
+      },
+      "tyre_pressure_differential_front_left": {
+        "name": "Écart pression AVG"
+      },
+      "tyre_pressure_differential_front_right": {
+        "name": "Écart pression AVD"
+      },
+      "tyre_pressure_differential_rear_left": {
+        "name": "Écart pression ARG"
+      },
+      "tyre_pressure_differential_rear_right": {
+        "name": "Écart pression ARD"
+      },
+      "tyre_pressure_differential_spare_tyre": {
+        "name": "Écart pression secours"
+      },
+      "position_front_left_door_window_lifter": {
+        "name": "Position vitre AVG"
+      },
+      "position_front_right_door_window_lifter": {
+        "name": "Position vitre AVD"
+      },
+      "position_rear_left_door_window_lifter": {
+        "name": "Position vitre ARG"
+      },
+      "position_rear_right_door_window_lifter": {
+        "name": "Position vitre ARD"
+      },
+      "position_sunroof_motor_hood_1": {
+        "name": "Position toit ouvrant"
+      },
+      "maintenance_interval__time_until_inspection": {
+        "name": "Intervalle inspection"
+      },
+      "maintenance_interval__time_until_oil_change": {
+        "name": "Intervalle vidange"
+      },
+      "maintenance_interval_distance_until_inspection": {
+        "name": "Distance inspection"
+      },
+      "maintenance_interval_distance_until_oil_change": {
+        "name": "Distance vidange"
+      },
+      "long_term_data_mileage": {
+        "name": "Distance trajet (long)"
+      },
+      "long_term_data_start_mileage": {
+        "name": "Km départ (long)"
+      },
+      "long_term_data_average_fuel_consumption": {
+        "name": "Conso. moy. essence (long)"
+      },
+      "long_term_data_average_electr_engine_consumption": {
+        "name": "Conso. moy. élec. (long)"
+      },
+      "long_term_data_average_speed": {
+        "name": "Vitesse moy. (long)"
+      },
+      "long_term_data_travel_time": {
+        "name": "Temps trajet (long)"
+      },
+      "short_term_data_mileage": {
+        "name": "Distance trajet (court)"
+      },
+      "short_term_data_start_mileage": {
+        "name": "Km départ (court)"
+      },
+      "short_term_data_average_fuel_consumption": {
+        "name": "Conso. moy. essence (court)"
+      },
+      "short_term_data_average_electr_engine_consumption": {
+        "name": "Conso. moy. élec. (court)"
+      },
+      "short_term_data_travel_time": {
+        "name": "Temps trajet (court)"
+      },
+      "oil_level_actual_level": {
+        "name": "Niveau d'huile"
+      },
+      "oil_level_additional_oil_level": {
+        "name": "Niveau huile additionnel"
+      },
+      "oil_level_total_max": {
+        "name": "Niveau huile max"
+      },
+      "oil_level_dipstick_indicator_function": {
+        "name": "Indicateur jauge huile"
+      },
+      "mileage_timestamp": {
+        "name": "Dernière connexion"
+      },
+      "last_charge_kwh": {
+        "name": "Dernière charge"
+      },
+      "days_until_subscription_expires": {
+        "name": "Jours avant expiration de l'abonnement"
+      },
+      "minutes_since_last_snapshot": {
+        "name": "Minutes depuis le dernier instantané"
+      },
+      "last_vehicle_update": {
+        "name": "Dernière mise à jour véhicule"
+      },
+      "last_connected": {
+        "name": "Dernière connexion"
+      },
+      "dataset_generated": {
+        "name": "Jeu de données généré"
+      },
+      "uncurated_fields_count": {
+        "name": "Champs non traités"
+      },
+      "integration_status": {
+        "name": "État de l'intégration",
+        "state": {
+          "starting": "Démarrage",
+          "ok": "OK",
+          "waiting_for_portal_data": "En attente de données",
+          "empty_snapshots": "Instantanés vides uniquement",
+          "delivery_not_ready": "Livraison pas prête",
+          "listing_failed": "Échec de la liste"
+        }
+      },
+      "charge_state": {
+        "name": "État de charge",
+        "state": {
+          "CHARGE_STATE_READY_FOR_CHARGING": "Prêt à charger",
+          "CHARGE_STATE_NOT_READY_FOR_CHARGING": "Pas prêt",
+          "CHARGE_STATE_CHARGING_HV_BATTERY": "Charge batterie HV",
+          "CHARGE_STATE_CONSERVATION_CHARGING": "Charge de conservation",
+          "CHARGE_STATE_DISCHARGING": "Décharge",
+          "CHARGE_STATE_CHARGING_ERROR": "Erreur de charge",
+          "CHARGE_STATE_CHARGE_PURPOSE_REACHED_AND_CONSERVATION": "Objectif atteint (conservation)",
+          "CHARGE_STATE_CHARGE_PURPOSE_REACHED_AND_NOT_CONSERVATION_CHARGING": "Objectif atteint"
+        }
+      },
+      "charge_mode": {
+        "name": "Mode de charge",
+        "state": {
+          "CHARGE_MODE_IMMEDIATELY_DEFAULT": "Immédiat (défaut)",
+          "CHARGE_MODE_IMMEDIATELY_PROFILE": "Immédiat (profil)",
+          "CHARGE_MODE_IMMEDIATELY_STOPPED": "Immédiat arrêté",
+          "CHARGE_MODE_EXTENDED_PROFILE": "Prolongé (profil)",
+          "CHARGE_MODE_EXTENDED_STOPPED": "Prolongé arrêté",
+          "CHARGE_MODE_INVALID": "Invalide"
+        }
+      },
+      "charge_type": {
+        "name": "Type de charge",
+        "state": {
+          "CHARGE_TYPE_AC": "AC",
+          "CHARGE_TYPE_DC": "DC",
+          "CHARGE_TYPE_OFF": "Arrêt"
+        }
+      },
+      "charging_scenario": {
+        "name": "Scénario de charge",
+        "state": {
+          "CHARGING_SCENARIO_OFF": "Arrêt",
+          "CHARGING_SCENARIO_IMMEDIATELY_CHARGING_ACTIVE": "Charge immédiate active",
+          "CHARGING_SCENARIO_IMMEDIATELY_CHARGING_FINISHED": "Charge immédiate terminée",
+          "CHARGING_SCENARIO_CHARGING_TO_DEPARTURE_TIME_ACTIVE": "Charge jusqu'au départ",
+          "CHARGING_SCENARIO_CHARGING_TO_DEPARTURE_TIME_FINISHED": "Charge départ terminée",
+          "CHARGING_SCENARIO_OPTIMISED_CHARGING_AC": "Charge AC optimisée",
+          "CHARGING_SCENARIO_OPTIMISED_CHARGING_FINISHED": "Charge optimisée terminée"
+        }
+      },
+      "immediate_action_state": {
+        "name": "État action de charge",
+        "state": {
+          "IMMEDIATE_ACTION_STATE_INVALID": "Invalide",
+          "IMMEDIATE_ACTION_STATE_IMMEDIATE_CHARGING": "Charge immédiate",
+          "IMMEDIATE_ACTION_STATE_IMMEDIATE_ACTION_TIME": "Action : heure",
+          "IMMEDIATE_ACTION_STATE_IMMEDIATE_ACTION_STOPPED": "Action arrêtée",
+          "IMMEDIATE_ACTION_STATE_IMMEDIATE_ACTION_RANGE": "Action : autonomie",
+          "IMMEDIATE_ACTION_STATE_IMMEDIATE_ACTION_SOC": "Action : charge",
+          "IMMEDIATE_ACTION_STATE_CHARGE_MODE_SELECTION": "Sélection du mode"
+        }
+      },
+      "charge_mode_selection": {
+        "name": "Sélection mode de charge",
+        "state": {
+          "CHARGE_MODE_SELECTION_INVALID": "Invalide",
+          "CHARGE_MODE_SELECTION_IMMEDIATECHARGING": "Charge immédiate",
+          "CHARGE_MODE_SELECTION_IMMEDIATE_DISCHARGING": "Décharge immédiate",
+          "CHARGE_MODE_SELECTION_TIMERCHARGING": "Charge programmée",
+          "CHARGE_MODE_SELECTION_TIMER_CHARGING_CLIMATIZATION": "Minuteur + clim",
+          "CHARGE_MODE_SELECTION_PREFERRED_CHARGING_TIMES": "Horaires préférés",
+          "CHARGE_MODE_SELECTION_ONLY_OWN_CURRENT": "Courant propre uniquement",
+          "CHARGE_MODE_SELECTION_HOME_STORAGE_CHARGING": "Stockage domestique"
+        }
+      },
+      "max_ac_charge_current": {
+        "name": "Courant AC max",
+        "state": {
+          "MAX_CHARGE_CURRENT_INVALID": "Invalide",
+          "MAX_CHARGE_CURRENT_MAXIMUM": "Maximum",
+          "MAX_CHARGE_CURRENT_REDUCED": "Réduit"
+        }
+      },
+      "auto_unlock_ac": {
+        "name": "Déverrouillage AC auto",
+        "state": {
+          "AUTO_UNLOCK_AC_INVALID": "Invalide",
+          "AUTO_UNLOCK_AC_OFF": "Arrêt",
+          "AUTO_UNLOCK_AC_ONCE": "Une fois",
+          "AUTO_UNLOCK_AC_PERMANENT": "Permanent"
+        }
+      },
+      "bcam_activation": {
+        "name": "Activation BCAM",
+        "state": {
+          "BCAM_ACTIVATION_ACTIVATED": "Activé",
+          "BCAM_ACTIVATION_DEACTIVATED": "Désactivé"
+        }
+      },
+      "charging_timer_reachability": {
+        "name": "Atteinte minuterie charge",
+        "state": {
+          "TARGET_REACHABILITY_CALCULATING": "Calcul en cours",
+          "TARGET_REACHABILITY_REACHABLE": "Atteignable",
+          "TARGET_REACHABILITY_NOT_REACHABLE": "Non atteignable"
+        }
+      },
+      "window_heating_state": {
+        "name": "Chauffage vitres",
+        "state": {
+          "WINDOW_HEATING_STATE_OFF": "Arrêt",
+          "WINDOW_HEATING_STATE_ON": "Marche"
+        }
+      }
+    },
+    "binary_sensor": {
+      "locked": {
+        "name": "Véhicule verrouillé"
+      },
+      "open": {
+        "name": "Véhicule ouvert"
+      },
+      "parking_brake": {
+        "name": "Frein de stationnement"
+      },
+      "parking_light_left": {
+        "name": "Feu de position gauche"
+      },
+      "parking_light_right": {
+        "name": "Feu de position droit"
+      },
+      "charge_mode_selection_options_immediate_charging": {
+        "name": "Charge immédiate"
+      },
+      "charge_mode_selection_options_immediate_discharging": {
+        "name": "Décharge immédiate"
+      },
+      "charge_mode_selection_options_timer_charging": {
+        "name": "Charge programmée"
+      },
+      "charge_mode_selection_options_timer_charging_climatization": {
+        "name": "Charge programmée + clim"
+      },
+      "charge_mode_selection_options_home_storage_charging": {
+        "name": "Charge stockage domestique"
+      },
+      "charge_mode_selection_options_only_own_current": {
+        "name": "Courant propre uniquement"
+      },
+      "charge_mode_selection_options_preferred_charging_times": {
+        "name": "Horaires de charge préférés"
+      },
+      "locked_state_front_left_door": {
+        "name": "Serrure porte avant gauche"
+      },
+      "locked_state_front_right_door": {
+        "name": "Serrure porte avant droite"
+      },
+      "locked_state__rear_left_door": {
+        "name": "Serrure porte arrière gauche"
+      },
+      "locked_state_rear_right_door": {
+        "name": "Serrure porte arrière droite"
+      },
+      "locked_state_tailgate": {
+        "name": "Serrure hayon"
+      },
+      "locked_state_front_engine_bonnet": {
+        "name": "Serrure capot"
+      },
+      "open_state_front_left_door": {
+        "name": "Porte avant gauche"
+      },
+      "open_state_front_right_door": {
+        "name": "Porte avant droite"
+      },
+      "open_state_rear_left_door": {
+        "name": "Porte arrière gauche"
+      },
+      "open_state_rear_right_door": {
+        "name": "Porte arrière droite"
+      },
+      "open_state_tailgate": {
+        "name": "Hayon"
+      },
+      "open_state_front_engine_bonnet": {
+        "name": "Capot"
+      },
+      "safe_state_front_right_door": {
+        "name": "Porte avant droite sécurisée"
+      },
+      "safe_state_rear_left_door": {
+        "name": "Porte arrière gauche sécurisée"
+      },
+      "safe_state_rear_right_door": {
+        "name": "Porte arrière droite sécurisée"
+      },
+      "safe_state_tailgate": {
+        "name": "Hayon sécurisé"
+      },
+      "safe_state_front_engine_bonnet": {
+        "name": "Capot sécurisé"
+      },
+      "state_front_left_door_window_lifter": {
+        "name": "Vitres avant gauche"
+      },
+      "state_front_right_door_window_lifter": {
+        "name": "Vitres avant droite"
+      },
+      "state_rear_left_door_window_lifter": {
+        "name": "Vitres arrière gauche"
+      },
+      "state_rear_right_door_window_lifter": {
+        "name": "Vitres arrière droite"
+      },
+      "state_sunroof_motor_hood_1": {
+        "name": "Toit ouvrant"
+      },
+      "state_sunroof_motor_hood_3": {
+        "name": "Moteur toit ouvrant 3"
+      },
+      "parking_lights": {
+        "name": "Feux de position"
+      },
+      "state_of_hood": {
+        "name": "État capot"
+      },
+      "state_service_hatch": {
+        "name": "Trappe de service"
+      },
+      "state_spoiler": {
+        "name": "Spoiler"
+      }
+    }
+  }
+}

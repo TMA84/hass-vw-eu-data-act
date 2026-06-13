@@ -8,6 +8,8 @@ Home Assistant.
 
 - **Login with your VW credentials** and pick a VIN during setup (the portal is
   queried for the vehicles on your account).
+- **Multi-brand login support** for Volkswagen, Volkswagen Commercial Vehicles,
+  Audi, Škoda, SEAT, CUPRA, and Bentley.
 - **Curated sensors** for the useful data points (battery SoC, target charge
   level, charge power, mileage, climate temperatures, charge state, doors
   locked, parking brake, …) — enabled by default with proper units and device
@@ -19,6 +21,16 @@ Home Assistant.
   The integration refreshes shortly after each expected drop; if nothing new is
   available it retries once a minute until the next dataset appears, then
   resumes the 15-minute cadence.
+- **Progressive server-error backoff** for temporary portal outages (5xx):
+  retries automatically slow down (5 -> 15 -> 30 minutes) while keeping the
+  last known values.
+- **Always-visible diagnostic status sensor** with localized status text and
+  debug attributes (status code, retry interval, empty snapshot count, last
+  error).
+- **Automatic monthly utility meters** are provisioned when source sensors are
+  available (charged energy and mileage).
+- **Localized value formatting** for important enum/status values with language
+  awareness (`de`, `en`, `fr`, `it`, `nl`, `es`).
 - **History** is provided by Home Assistant's normal recorder: numeric sensors
   with a state class accrue long-term statistics from their live values going
   forward (the integration does not back-fill past datapoints — see notes).
@@ -94,6 +106,22 @@ Once datasets are being generated, continue with the installation below.
 - Credentials are stored in the Home Assistant config entry and used only to
   authenticate against the official portal.
 
+## Status sensor codes
+
+The diagnostic sensor `Status` exposes human-readable labels (localized by Home
+Assistant language) and these raw `status_code` values in attributes:
+
+- `starting`
+- `updating`
+- `ok`
+- `waiting_for_portal_data`
+- `empty_snapshots`
+- `delivery_not_ready`
+- `listing_failed`
+- `auth_failed`
+- `server_error`
+- `download_failed`
+
 ## Troubleshooting the login
 
 If setup fails to accept your credentials, you can reproduce and debug the
@@ -132,6 +160,22 @@ official PDF and committed to the repo. To regenerate from a newer PDF:
 python -m venv .venv && .venv/bin/pip install pdfplumber
 .venv/bin/python tools/parse_dictionary.py path/to/DataDictionary.pdf
 ```
+
+## Release notes (0.3.0)
+
+- Non-blocking initial setup: entities load immediately and first refresh runs
+  in the background.
+- Dynamic entity discovery after first data arrival for sensors and binary
+  sensors.
+- New diagnostic status sensor with localized labels and debug attributes.
+- Improved coordinator resilience with progressive 5xx backoff (5 -> 15 -> 30
+  minutes) while preserving last known values.
+- Automatic monthly utility meter helper provisioning for charged energy and
+  mileage (when source sensors are available).
+- Extended brand support: Volkswagen Commercial Vehicles and Bentley.
+- Localized enum/status value formatting for `de`, `en`, `fr`, `it`, `nl`, `es`.
+- Additional translation resources for `fr`, `it`, `nl`, and full baseline
+  Spanish support.
 
 ## License
 

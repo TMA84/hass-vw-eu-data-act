@@ -6,7 +6,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import EudaConfigEntry
@@ -27,20 +27,40 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data.coordinator
-    points: dict[str, DataPoint] = coordinator.data or {}
-    present_fields = {dp.field_name for dp in points.values()}
+    added_binary_fields: set[str] = set()
 
-    # Detect dataset format and select appropriate curated group
-    format_type = detect_dataset_format(points)
-    curated_binary = (
-        CURATED_BINARY_DOTTED if format_type == "dotted" else CURATED_BINARY_FLAT
-    )
+    def _collect_new_entities() -> list[EudaBinarySensor]:
+        points: dict[str, DataPoint] = coordinator.data or {}
+        if not points:
+            return []
+        present_fields = {dp.field_name for dp in points.values()}
 
-    async_add_entities(
-        EudaBinarySensor(coordinator, curated)
-        for curated in curated_binary
-        if curated.field_name in present_fields
-    )
+        # Detect dataset format and select appropriate curated group
+        format_type = detect_dataset_format(points)
+        curated_binary = (
+            CURATED_BINARY_DOTTED if format_type == "dotted" else CURATED_BINARY_FLAT
+        )
+
+        new_entities: list[EudaBinarySensor] = []
+        for curated in curated_binary:
+            if curated.field_name in added_binary_fields:
+                continue
+            if curated.field_name in present_fields:
+                new_entities.append(EudaBinarySensor(coordinator, curated))
+                added_binary_fields.add(curated.field_name)
+        return new_entities
+
+    initial_entities = _collect_new_entities()
+    if initial_entities:
+        async_add_entities(initial_entities)
+
+    @callback
+    def _handle_coordinator_update() -> None:
+        new_entities = _collect_new_entities()
+        if new_entities:
+            async_add_entities(new_entities)
+
+    entry.async_on_unload(coordinator.async_add_listener(_handle_coordinator_update))
 
 
 def _find_by_field(points: dict[str, DataPoint], field_name: str) -> DataPoint | None:
