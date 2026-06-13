@@ -24,6 +24,7 @@ from homeassistant.components.utility_meter.const import (
 )
 
 from .const import CONF_NICKNAME, CONF_VIN
+from .data import localize_label
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,7 +59,8 @@ _AUTO_METERS: tuple[UtilityMeterSpec, ...] = (
 def utility_meter_helper_name(entry: ConfigEntry, helper_name_suffix: str) -> str:
     """Return a stable helper title that remains unique across vehicles."""
     label = entry.data.get(CONF_NICKNAME) or entry.data[CONF_VIN]
-    return f"{label} {helper_name_suffix}"
+    language = entry.hass.config.language if entry.hass else None
+    return f"{label} {localize_label(helper_name_suffix, language)}"
 
 
 def _source_entity_id(

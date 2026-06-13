@@ -17,6 +17,7 @@ from .data import (
     CuratedBinary,
     DataPoint,
     detect_dataset_format,
+    localize_label,
 )
 from .entity import EudaEntity
 
@@ -80,7 +81,7 @@ class EudaBinarySensor(EudaEntity, BinarySensorEntity):
         super().__init__(coordinator)
         self._curated = curated
         self._attr_unique_id = f"{coordinator.vin}_{curated.field_name}"
-        self._attr_name = curated.name
+        self._attr_name = localize_label(curated.name, coordinator.hass.config.language)
         if curated.icon:
             self._attr_icon = curated.icon
         if curated.device_class:

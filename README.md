@@ -163,7 +163,13 @@ python -m venv .venv && .venv/bin/pip install pdfplumber
 .venv/bin/python tools/parse_dictionary.py path/to/DataDictionary.pdf
 ```
 
-## Release notes (0.3.3)
+## Release notes (0.3.4)
+
+- Automatically localize curated sensor and binary sensor labels based on the
+  Home Assistant system language (currently with German mappings and English
+  fallback).
+- Localize newly created utility meter helper names (for monthly energy and
+  mileage) according to system language.
 
 - Improve `Last connected` timestamp handling with a fallback parser for
   value-encoded timestamps (epoch millis / ISO text).

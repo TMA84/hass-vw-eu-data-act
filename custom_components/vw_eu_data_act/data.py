@@ -357,6 +357,39 @@ _ENUM_LABELS_BY_LANG: dict[str, dict[str, str]] = {
     },
 }
 
+# Localized entity/helper labels. Unknown labels fall back to the original
+# English text so new curated sensors remain usable without extra mappings.
+_LABELS_BY_LANG: dict[str, dict[str, str]] = {
+    "de": {
+        "Status": "Status",
+        "Battery": "Batterie",
+        "Target charge level": "Ziel-Ladestand",
+        "Charge power": "Ladeleistung",
+        "Remaining charging time": "Verbleibende Ladezeit",
+        "Remaining time to bulk": "Verbleibende Zeit bis Bulk",
+        "Mileage": "Kilometerstand",
+        "Electric range": "Elektrische Reichweite",
+        "Remaining climate time": "Verbleibende Klimatisierungszeit",
+        "Residual energy": "Restenergie",
+        "Battery min temperature": "Batterie Mindesttemperatur",
+        "Battery max temperature": "Batterie Hoechsttemperatur",
+        "Last connected": "Zuletzt verbunden",
+        "Charge state": "Ladezustand",
+        "Charge mode": "Lademodus",
+        "Charge type": "Ladetyp",
+        "Charging scenario": "Ladeszenario",
+        "Charging action state": "Ladeaktionsstatus",
+        "Charge mode selection": "Lademodus-Auswahl",
+        "Max AC charge current": "Maximaler AC-Ladestrom",
+        "Window heating": "Scheibenheizung",
+        "BEM level": "BEM-Level",
+        "Vehicle locked": "Fahrzeug verriegelt",
+        "Parking brake": "Parkbremse",
+        "Monthly charged energy": "Monatlich geladene Energie",
+        "Monthly mileage": "Monatlicher Kilometerstand",
+    }
+}
+
 
 def _language_key(language: str | None) -> str:
     """Normalize HA language tags to the supported short language key."""
@@ -372,6 +405,11 @@ def _language_key(language: str | None) -> str:
     if lang.startswith("es"):
         return "es"
     return "en"
+
+
+def localize_label(label: str, language: str | None = None) -> str:
+    """Translate a static UI label according to HA language settings."""
+    return _LABELS_BY_LANG.get(_language_key(language), {}).get(label, label)
 
 # Bare field names that are meaningless on their own; for these we name the
 # entity from the dictionary description instead.

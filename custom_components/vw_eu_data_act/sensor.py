@@ -29,6 +29,7 @@ from .data import (
     detect_dataset_format,
     format_curated_value,
     friendly_name,
+    localize_label,
     resolve_distance_unit,
 )
 from .entity import EudaEntity
@@ -249,7 +250,7 @@ class EudaCuratedSensor(EudaEntity, SensorEntity):
         super().__init__(coordinator)
         self._curated = curated
         self._attr_unique_id = f"{coordinator.vin}_{curated.field_name}"
-        self._attr_name = curated.name
+        self._attr_name = localize_label(curated.name, coordinator.hass.config.language)
         if curated.icon:
             self._attr_icon = curated.icon
         if curated.device_class:
@@ -387,7 +388,7 @@ class EudaStatusSensor(EudaEntity, SensorEntity):
     def __init__(self, coordinator: EudaCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.vin}_integration_status"
-        self._attr_name = "Status"
+        self._attr_name = localize_label("Status", coordinator.hass.config.language)
         self._attr_icon = "mdi:information-outline"
 
     @property
