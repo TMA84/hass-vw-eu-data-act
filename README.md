@@ -1,5 +1,7 @@
 # Volkswagen EU Data Act — Home Assistant integration
 
+![VW Group EU Data Act logo](icon.png)
+
 Periodically downloads your vehicle's "continuous data" from the Volkswagen
 EU Data Act portal (`eu-data-act.drivesomethinggreater.com`) and exposes it in
 Home Assistant.
